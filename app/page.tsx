@@ -15,7 +15,6 @@ import {
 
 type Profile = {
   name: string;
-  age: string;
 };
 
 type BpCategory = "Normal" | "Elevated" | "Stage 1" | "Stage 2" | "Crisis";
@@ -36,6 +35,7 @@ const PROFILE_KEY = "bp-dashboard-profile";
 const READINGS_KEY = "bp-dashboard-readings";
 const SESSION_KEY = "bp-dashboard-session";
 const LOGIN_KEY = "bp-dashboard-login";
+const LOGIN_ACTIVITY_KEY = "bp-dashboard-login-activity";
 const sections: Section[] = ["Profile", "Dashboard", "History", "Health Tips"];
 
 function categorizeReading(systolic: number, diastolic: number): BpCategory {
@@ -173,7 +173,7 @@ const structuredTips = [
 
 export default function Home() {
   const [activeSection, setActiveSection] = useState<Section>("Dashboard");
-  const [profile, setProfile] = useState<Profile>({ name: "", age: "" });
+  const [profile, setProfile] = useState<Profile>({ name: "" });
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
   const [readingAge, setReadingAge] = useState("");
@@ -184,17 +184,20 @@ export default function Home() {
   const [hydrated, setHydrated] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [latestSubmitted, setLatestSubmitted] = useState<Reading | null>(null);
+  const [loginActivity, setLoginActivity] = useState<string[]>([]);
 
   useEffect(() => {
     const savedSession = localStorage.getItem(SESSION_KEY);
     const savedProfile = localStorage.getItem(PROFILE_KEY);
     const savedReadings = localStorage.getItem(READINGS_KEY);
     const savedLoginEmail = localStorage.getItem(LOGIN_KEY);
+    const savedLoginActivity = localStorage.getItem(LOGIN_ACTIVITY_KEY);
 
     if (savedSession) setSession(JSON.parse(savedSession));
     if (savedProfile) setProfile(JSON.parse(savedProfile));
     if (savedReadings) setReadings(JSON.parse(savedReadings));
     if (savedLoginEmail) setLoginEmail(savedLoginEmail);
+    if (savedLoginActivity) setLoginActivity(JSON.parse(savedLoginActivity));
     setHydrated(true);
   }, []);
 
@@ -207,6 +210,11 @@ export default function Home() {
     if (!hydrated) return;
     localStorage.setItem(READINGS_KEY, JSON.stringify(readings));
   }, [readings, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    localStorage.setItem(LOGIN_ACTIVITY_KEY, JSON.stringify(loginActivity));
+  }, [loginActivity, hydrated]);
 
   useEffect(() => {
     if (!hydrated) return;
@@ -288,7 +296,7 @@ export default function Home() {
     event.preventDefault();
     const sys = Number(systolic);
     const dia = Number(diastolic);
-    const age = Number(readingAge || profile.age);
+    const age = Number(readingAge);
     if (!Number.isFinite(sys) || !Number.isFinite(dia) || !Number.isFinite(age)) return;
     if (sys < 70 || dia < 40 || age < 1) return;
 
@@ -316,6 +324,8 @@ export default function Home() {
   const handleLogin = (event: FormEvent) => {
     event.preventDefault();
     if (!loginEmail.trim() || !loginPassword.trim()) return;
+    const loginTimestamp = new Date().toISOString();
+    setLoginActivity((prev) => [loginTimestamp, ...prev].slice(0, 20));
     setSession({ email: loginEmail.trim(), loggedIn: true });
     setLoginPassword("");
     setActiveSection("Dashboard");
@@ -338,12 +348,33 @@ export default function Home() {
           className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
           placeholder="Full Name"
         />
-        <input
-          value={profile.age}
-          onChange={(event) => setProfile((prev) => ({ ...prev, age: event.target.value }))}
-          className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
-          placeholder="Default Age"
-        />
+      </div>
+
+      <div className="mt-5 rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100">
+        <p className="text-sm font-semibold text-blue-700">Login Activity</p>
+        <p className="mt-2 text-sm text-slate-700">
+          Last Login:{" "}
+          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
+            {loginActivity[0]
+              ? new Date(loginActivity[0]).toLocaleString([], {
+                  year: "numeric",
+                  month: "long",
+                  day: "numeric",
+                  hour: "numeric",
+                  minute: "2-digit",
+                })
+              : "No login recorded yet"}
+          </span>
+        </p>
+        <div className="mt-3">
+          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Recent Logins</p>
+          <ul className="mt-2 space-y-1 text-sm text-slate-600">
+            {loginActivity.slice(0, 3).map((item) => (
+              <li key={item}>- {new Date(item).toLocaleString()}</li>
+            ))}
+            {loginActivity.length === 0 ? <li>- No entries available</li> : null}
+          </ul>
+        </div>
       </div>
     </section>
   );
@@ -482,7 +513,7 @@ export default function Home() {
             type="number"
             min={1}
             className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
-            placeholder={`Age ${profile.age ? `(default ${profile.age})` : ""}`}
+            placeholder="Age"
             required
           />
           <button
