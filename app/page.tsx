@@ -227,6 +227,23 @@ function formatDateTimeLocal(d: string | undefined): string {
   }
 }
 
+const INVALID_EMAIL_MSG = "Please enter a valid email address.";
+
+/** Simple format check: local@domain with domain containing a dot and TLD (2+ chars). */
+function isValidEmailFormat(email: string): boolean {
+  const t = email.trim();
+  if (!t.includes("@")) return false;
+  const parts = t.split("@");
+  if (parts.length !== 2) return false;
+  const [local, domain] = parts;
+  if (!local || !domain) return false;
+  if (!domain.includes(".")) return false;
+  const domainParts = domain.split(".");
+  const tld = domainParts[domainParts.length - 1];
+  if (!tld || tld.length < 2) return false;
+  return true;
+}
+
 export default function Home() {
   const [activeSection, setActiveSection] = useState<Section>("Dashboard");
   const [profile, setProfile] = useState<Profile>({ name: "" });
@@ -246,7 +263,9 @@ export default function Home() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [latestSubmitted, setLatestSubmitted] = useState<Reading | null>(null);
   const [saveError, setSaveError] = useState("");
+  const [bpFormWarning, setBpFormWarning] = useState("");
   const [fetchError, setFetchError] = useState("");
+  const [saveSuccessToast, setSaveSuccessToast] = useState(false);
 
   const fetchReadings = async (userId: string) => {
     const { data, error } = await supabase
@@ -302,6 +321,12 @@ export default function Home() {
       subscription.unsubscribe();
     };
   }, []);
+
+  useEffect(() => {
+    if (!saveSuccessToast) return;
+    const t = window.setTimeout(() => setSaveSuccessToast(false), 3200);
+    return () => window.clearTimeout(t);
+  }, [saveSuccessToast]);
 
   const latestReading = readings[0];
   const latestCategory = latestReading?.category ?? "Normal";
@@ -461,12 +486,28 @@ export default function Home() {
     event.preventDefault();
     if (!session?.user) return;
 
-    const sys = Number(systolic);
-    const dia = Number(diastolic);
-    const age = Number(readingAge);
-    if (!Number.isFinite(sys) || !Number.isFinite(dia) || !Number.isFinite(age)) return;
-    if (sys < 70 || dia < 40 || age < 1) return;
+    const ageStr = readingAge.trim();
+    const sysStr = systolic.trim();
+    const diaStr = diastolic.trim();
+    if (!ageStr || !sysStr || !diaStr) {
+      setBpFormWarning("Please fill in Age, Systolic, and Diastolic before submitting.");
+      setSaveError("");
+      return;
+    }
 
+    const sys = Number(sysStr);
+    const dia = Number(diaStr);
+    const age = Number(ageStr);
+    if (!Number.isFinite(sys) || !Number.isFinite(dia) || !Number.isFinite(age)) {
+      setBpFormWarning("Please enter valid numbers for all fields.");
+      return;
+    }
+    if (sys < 70 || dia < 40 || age < 1) {
+      setBpFormWarning("Check your values: age ≥ 1, systolic ≥ 70, diastolic ≥ 40.");
+      return;
+    }
+
+    setBpFormWarning("");
     setSaveError("");
     const { data, error } = await supabase
       .from("readings")
@@ -497,6 +538,7 @@ export default function Home() {
     setLatestSubmitted(entry);
     setShowAddReadingModal(false);
     setShowResultModal(true);
+    setSaveSuccessToast(true);
     setSystolic("");
     setDiastolic("");
     setReadingAge("");
@@ -515,6 +557,11 @@ export default function Home() {
   const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
     if (!loginEmail.trim() || !loginPassword.trim()) return;
+
+    if (!isValidEmailFormat(loginEmail)) {
+      setAuthMessage(INVALID_EMAIL_MSG);
+      return;
+    }
 
     setAuthMessage("");
     if (authMode === "signup") {
@@ -754,6 +801,7 @@ export default function Home() {
     setDiastolic("");
     setReadingAge("");
     setSaveError("");
+    setBpFormWarning("");
   };
 
   const renderDashboard = () => (
@@ -804,6 +852,7 @@ export default function Home() {
           type="button"
           onClick={() => {
             setSaveError("");
+            setBpFormWarning("");
             setShowAddReadingModal(true);
           }}
           className={`${primaryBtnClass} w-full lg:w-auto lg:self-start`}
@@ -861,29 +910,41 @@ export default function Home() {
             <input
               type="email"
               autoComplete="email"
+              inputMode="email"
               value={loginEmail}
-              onChange={(event) => setLoginEmail(event.target.value)}
+              onChange={(event) => {
+                setLoginEmail(event.target.value);
+                if (authMessage === INVALID_EMAIL_MSG) setAuthMessage("");
+              }}
               placeholder="Email"
-              className="w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+              className="login-email-input w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 placeholder:text-gray-500 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
               required
             />
-            <div className="relative">
+            <div className="relative isolate">
               <input
                 type={showLoginPassword ? "text" : "password"}
                 autoComplete="current-password"
                 value={loginPassword}
                 onChange={(event) => setLoginPassword(event.target.value)}
                 placeholder="Password"
-                className="w-full rounded-[12px] border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+                className="login-password-input w-full rounded-[12px] border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm text-neutral-900 placeholder:text-gray-500 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
                 required
               />
               <button
                 type="button"
-                onClick={() => setShowLoginPassword((v) => !v)}
-                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-600 transition hover:bg-slate-100 hover:text-gray-900"
+                onClick={(e) => {
+                  e.preventDefault();
+                  setShowLoginPassword((v) => !v);
+                }}
+                className="absolute right-1.5 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 shrink-0 items-center justify-center rounded-lg text-gray-700 transition hover:bg-slate-100 hover:text-gray-900 active:scale-95"
                 aria-label={showLoginPassword ? "Hide password" : "Show password"}
+                aria-pressed={showLoginPassword}
               >
-                {showLoginPassword ? <EyeOff className="h-5 w-5" strokeWidth={2} /> : <Eye className="h-5 w-5" strokeWidth={2} />}
+                {showLoginPassword ? (
+                  <EyeOff className="pointer-events-none h-5 w-5 shrink-0" strokeWidth={2} />
+                ) : (
+                  <Eye className="pointer-events-none h-5 w-5 shrink-0" strokeWidth={2} />
+                )}
               </button>
             </div>
             <button type="submit" className={`${primaryBtnClass} mx-auto w-full max-w-full`}>
@@ -895,12 +956,20 @@ export default function Home() {
               onClick={() => {
                 setAuthMode((prev) => (prev === "login" ? "signup" : "login"));
                 setAuthMessage("");
+                setShowLoginPassword(false);
               }}
             >
               {authMode === "login" ? "Need an account? Sign up" : "Already have an account? Login"}
             </button>
             {authMessage ? (
-              <p className="text-center text-sm text-blue-700">{authMessage}</p>
+              <p
+                className={`text-center text-sm font-medium ${
+                  authMessage === INVALID_EMAIL_MSG ? "text-red-600" : "text-blue-700"
+                }`}
+                role={authMessage === INVALID_EMAIL_MSG ? "alert" : undefined}
+              >
+                {authMessage}
+              </p>
             ) : null}
           </form>
         </div>
@@ -910,6 +979,26 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/60 text-slate-800">
+      {saveSuccessToast ? (
+        <div
+          className="fixed left-1/2 top-4 z-[80] flex max-w-[min(90vw,360px)] items-center gap-2 rounded-[12px] border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-lg ring-1 ring-emerald-100"
+          style={{ animation: "success-toast-in 0.35s ease-out both" }}
+          role="status"
+          aria-live="polite"
+        >
+          <span
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white"
+            style={{ animation: "success-check-pop 0.45s ease-out both" }}
+            aria-hidden
+          >
+            <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </span>
+          <span>Success! Reading saved.</span>
+        </div>
+      ) : null}
+
       <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md lg:hidden">
         <button
           type="button"
@@ -1065,38 +1154,49 @@ export default function Home() {
                 <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Age</label>
                 <input
                   value={readingAge}
-                  onChange={(event) => setReadingAge(event.target.value)}
+                  onChange={(event) => {
+                    setReadingAge(event.target.value);
+                    setBpFormWarning("");
+                  }}
                   type="number"
                   min={1}
                   placeholder="22"
-                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-                  required
+                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Systolic</label>
                 <input
                   value={systolic}
-                  onChange={(event) => setSystolic(event.target.value)}
+                  onChange={(event) => {
+                    setSystolic(event.target.value);
+                    setBpFormWarning("");
+                  }}
                   type="number"
                   min={70}
                   placeholder="120"
-                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-                  required
+                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
                 />
               </div>
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Diastolic</label>
                 <input
                   value={diastolic}
-                  onChange={(event) => setDiastolic(event.target.value)}
+                  onChange={(event) => {
+                    setDiastolic(event.target.value);
+                    setBpFormWarning("");
+                  }}
                   type="number"
                   min={40}
                   placeholder="80"
-                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-                  required
+                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
                 />
               </div>
+              {bpFormWarning ? (
+                <p className="text-sm font-medium text-amber-700" role="alert">
+                  {bpFormWarning}
+                </p>
+              ) : null}
               {saveError ? <p className="text-sm text-red-600">{saveError}</p> : null}
               <button type="submit" className={`${primaryBtnClass} w-full py-3.5`}>
                 Check My Blood Pressure
@@ -1115,6 +1215,21 @@ export default function Home() {
               <p className="text-xs uppercase tracking-wide text-white/90">Hypertension Buddy · Classification</p>
               <h3 className="mt-1 text-xl font-semibold sm:text-2xl">{latestSubmitted.category}</h3>
               <p className="mt-1 text-sm text-white/90">{categoryStyles[latestSubmitted.category].note}</p>
+            </div>
+            <div
+              className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50 px-6 py-3 text-sm font-semibold text-emerald-800"
+              style={{ animation: "success-toast-in 0.4s ease-out both" }}
+            >
+              <span
+                className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white"
+                style={{ animation: "success-check-pop 0.5s ease-out both" }}
+                aria-hidden
+              >
+                <svg className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={2.5} viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                </svg>
+              </span>
+              Success! Your reading is saved securely.
             </div>
             <div className="space-y-4 p-6 pt-4">
               <div className="rounded-2xl bg-slate-50 p-4">

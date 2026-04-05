@@ -22,3 +22,47 @@ body {
   background: var(--background);
   color: var(--foreground);
 }
+
+/* Readable text when browsers autofill login fields (esp. mobile Safari). */
+.login-email-input:-webkit-autofill,
+.login-email-input:-webkit-autofill:hover,
+.login-email-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #171717;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 9999s ease-out;
+}
+
+.login-password-input:-webkit-autofill,
+.login-password-input:-webkit-autofill:hover,
+.login-password-input:-webkit-autofill:focus {
+  -webkit-text-fill-color: #171717;
+  -webkit-box-shadow: 0 0 0 1000px #ffffff inset;
+  box-shadow: 0 0 0 1000px #ffffff inset;
+  transition: background-color 9999s ease-out;
+}
+
+@keyframes success-toast-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-12px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@keyframes success-check-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.08);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
