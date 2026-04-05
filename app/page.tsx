@@ -2,6 +2,7 @@
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
+import type { Session } from "@supabase/supabase-js";
 import {
   CartesianGrid,
   Legend,
@@ -12,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { supabase } from "@/lib/supabaseClient";
 
 type Profile = {
   name: string;
@@ -23,19 +25,14 @@ type Reading = {
   id: string;
   systolic: number;
   diastolic: number;
+  /** Stored in Supabase `readings.pulse` column (schema unchanged). */
   age: number;
   category: BpCategory;
   createdAt: string;
 };
 
-type Session = { email: string; loggedIn: boolean };
 type Section = "Profile" | "Dashboard" | "History" | "Health Tips";
 
-const PROFILE_KEY = "bp-dashboard-profile";
-const READINGS_KEY = "bp-dashboard-readings";
-const SESSION_KEY = "bp-dashboard-session";
-const LOGIN_KEY = "bp-dashboard-login";
-const LOGIN_ACTIVITY_KEY = "bp-dashboard-login-activity";
 const sections: Section[] = ["Profile", "Dashboard", "History", "Health Tips"];
 
 function categorizeReading(systolic: number, diastolic: number): BpCategory {
@@ -112,6 +109,23 @@ const clinicalAdvice: Record<BpCategory, string[]> = {
   ],
 };
 
+/** ACC/AHA-style reference ranges for patient education (PDF + UI context). */
+const ahaJnc8ReferenceRows: { category: BpCategory; systolic: string; diastolic: string }[] = [
+  { category: "Normal", systolic: "<120 mmHg", diastolic: "<80 mmHg" },
+  { category: "Elevated", systolic: "120–129 mmHg", diastolic: "<80 mmHg" },
+  { category: "Stage 1", systolic: "130–139 mmHg", diastolic: "80–89 mmHg" },
+  { category: "Stage 2", systolic: "≥140 mmHg", diastolic: "≥90 mmHg" },
+  { category: "Crisis", systolic: "≥180 mmHg", diastolic: "≥120 mmHg" },
+];
+
+const modalHeaderClass: Record<BpCategory, string> = {
+  Normal: "bg-emerald-600",
+  Elevated: "bg-amber-500",
+  "Stage 1": "bg-orange-500",
+  "Stage 2": "bg-red-600",
+  Crisis: "bg-red-800",
+};
+
 const structuredTips = [
   {
     title: "DASH Diet",
@@ -171,6 +185,47 @@ const structuredTips = [
   },
 ];
 
+const dataCardClass =
+  "rounded-[12px] border border-slate-100 bg-white p-5 shadow-[0_2px_16px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_4px_24px_rgba(37,99,235,0.08)]";
+
+const shellCardClass =
+  "rounded-[12px] border border-slate-100 bg-white shadow-[0_2px_20px_rgba(15,23,42,0.06)]";
+
+const primaryBtnClass =
+  "rounded-[12px] bg-[#2563eb] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2";
+
+function getUserInitials(name: string, email: string): string {
+  const n = name.trim();
+  if (n) {
+    const parts = n.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return n.slice(0, 2).toUpperCase();
+  }
+  const e = email.trim();
+  if (!e) return "?";
+  return e.slice(0, 2).toUpperCase();
+}
+
+function formatLongDate(d: string | undefined): string {
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+  } catch {
+    return "—";
+  }
+}
+
+function formatDateTimeLocal(d: string | undefined): string {
+  if (!d) return "—";
+  try {
+    return new Date(d).toLocaleString();
+  } catch {
+    return "—";
+  }
+}
+
 export default function Home() {
   const [activeSection, setActiveSection] = useState<Section>("Dashboard");
   const [profile, setProfile] = useState<Profile>({ name: "" });
@@ -181,55 +236,75 @@ export default function Home() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [session, setSession] = useState<Session | null>(null);
-  const [hydrated, setHydrated] = useState(false);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [authMode, setAuthMode] = useState<"login" | "signup">("login");
+  const [authMessage, setAuthMessage] = useState("");
   const [showResultModal, setShowResultModal] = useState(false);
+  const [showAddReadingModal, setShowAddReadingModal] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [latestSubmitted, setLatestSubmitted] = useState<Reading | null>(null);
-  const [loginActivity, setLoginActivity] = useState<string[]>([]);
+  const [saveError, setSaveError] = useState("");
+  const [fetchError, setFetchError] = useState("");
 
-  useEffect(() => {
-    const savedSession = localStorage.getItem(SESSION_KEY);
-    const savedProfile = localStorage.getItem(PROFILE_KEY);
-    const savedReadings = localStorage.getItem(READINGS_KEY);
-    const savedLoginEmail = localStorage.getItem(LOGIN_KEY);
-    const savedLoginActivity = localStorage.getItem(LOGIN_ACTIVITY_KEY);
+  const fetchReadings = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("readings")
+      .select("id, systolic, diastolic, pulse, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
 
-    if (savedSession) setSession(JSON.parse(savedSession));
-    if (savedProfile) setProfile(JSON.parse(savedProfile));
-    if (savedReadings) setReadings(JSON.parse(savedReadings));
-    if (savedLoginEmail) setLoginEmail(savedLoginEmail);
-    if (savedLoginActivity) setLoginActivity(JSON.parse(savedLoginActivity));
-    setHydrated(true);
-  }, []);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(PROFILE_KEY, JSON.stringify(profile));
-  }, [profile, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(READINGS_KEY, JSON.stringify(readings));
-  }, [readings, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    localStorage.setItem(LOGIN_ACTIVITY_KEY, JSON.stringify(loginActivity));
-  }, [loginActivity, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated) return;
-    if (session?.loggedIn) {
-      localStorage.setItem(SESSION_KEY, JSON.stringify(session));
-      localStorage.setItem(LOGIN_KEY, session.email);
-    } else {
-      localStorage.removeItem(SESSION_KEY);
+    if (error) {
+      setFetchError(error.message);
+      return;
     }
-  }, [session, hydrated]);
+
+    setFetchError("");
+    setReadings(
+      (data ?? []).map((row) => ({
+        id: row.id,
+        systolic: row.systolic,
+        diastolic: row.diastolic,
+        age: row.pulse,
+        category: categorizeReading(row.systolic, row.diastolic),
+        createdAt: row.created_at,
+      }))
+    );
+  };
+
+  useEffect(() => {
+    const bootAuth = async () => {
+      const { data } = await supabase.auth.getSession();
+      setSession(data.session);
+      setAuthLoading(false);
+      if (data.session?.user) {
+        setLoginEmail(data.session.user.email ?? "");
+        await fetchReadings(data.session.user.id);
+      }
+    };
+
+    void bootAuth();
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      setSession(nextSession);
+      setLoginEmail(nextSession?.user.email ?? "");
+      if (!nextSession?.user) {
+        setReadings([]);
+      } else {
+        void fetchReadings(nextSession.user.id);
+      }
+    });
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, []);
 
   const latestReading = readings[0];
   const latestCategory = latestReading?.category ?? "Normal";
   const style = categoryStyles[latestCategory];
-  const displayName = profile.name || session?.email || "User";
+  const displayName = profile.name || session?.user.email || "User";
 
   const chartData = useMemo(
     () =>
@@ -245,154 +320,359 @@ export default function Home() {
 
   const downloadPdfReport = () => {
     const doc = new jsPDF();
-    const now = new Date().toLocaleString();
-    doc.setFontSize(18);
-    doc.text("Professional Blood Pressure Report", 14, 18);
-    doc.setFontSize(11);
-    doc.text(`Generated: ${now}`, 14, 26);
-    doc.text(`User: ${displayName}`, 14, 32);
-    doc.text(`Email: ${session?.email ?? "-"}`, 14, 38);
-    doc.text(`Current Status: ${latestCategory}`, 14, 44);
+    const pageW = doc.internal.pageSize.getWidth();
+    const margin = 14;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const ensureSpace = (needed: number) => {
+      const pageH = doc.internal.pageSize.getHeight();
+      if (y + needed > pageH - margin) {
+        doc.addPage();
+        y = margin;
+      }
+    };
+
+    const sectionTitle = (title: string) => {
+      ensureSpace(14);
+      doc.setFillColor(37, 99, 235);
+      doc.rect(margin, y - 2, contentW, 9, "F");
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(11);
+      doc.setFont("helvetica", "bold");
+      doc.text(title, margin + 2, y + 4);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont("helvetica", "normal");
+      y += 12;
+    };
+
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(16);
+    doc.setTextColor(30, 41, 59);
+    doc.text("Hypertension Buddy - Blood Pressure Report", margin, y);
+    y += 8;
+    doc.setFont("helvetica", "normal");
+    doc.setFontSize(9);
+    doc.setTextColor(100, 116, 139);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
+    y += 10;
+    doc.setTextColor(0, 0, 0);
+
+    sectionTitle("Patient");
+    doc.setFontSize(10);
+    doc.text(`Patient Name: ${displayName}`, margin, y);
+    y += 6;
+    const ageForReport = latestReading?.age;
+    doc.text(`Age (at latest reading): ${ageForReport != null ? String(ageForReport) : "—"}`, margin, y);
+    y += 6;
+    doc.setFontSize(9);
+    doc.setTextColor(71, 85, 105);
+    doc.text(`Account email (reference): ${session?.user.email ?? "—"}`, margin, y);
+    doc.setTextColor(0, 0, 0);
+    y += 8;
+
+    sectionTitle("Current summary");
+    doc.setFontSize(10);
+    doc.text(`Classification: ${latestCategory}`, margin, y);
+    y += 6;
     if (latestReading) {
-      doc.text(`Latest Reading: ${latestReading.systolic}/${latestReading.diastolic} mmHg`, 14, 50);
-      doc.text(`Age at Latest Reading: ${latestReading.age}`, 14, 56);
+      doc.text(
+        `Latest BP: ${latestReading.systolic}/${latestReading.diastolic} mmHg  |  Age recorded: ${latestReading.age}`,
+        margin,
+        y
+      );
+      y += 6;
+    } else {
+      doc.text("No readings on file.", margin, y);
+      y += 6;
     }
 
-    doc.setFontSize(13);
-    doc.text("Reading History", 14, 66);
-    doc.setFontSize(10);
-
-    let y = 74;
-    if (readings.length === 0) {
-      doc.text("No readings available.", 14, y);
-    } else {
-      doc.text("Timestamp", 14, y);
-      doc.text("Sys", 88, y);
-      doc.text("Dia", 104, y);
-      doc.text("Age", 120, y);
-      doc.text("Category", 136, y);
-      y += 5;
-      doc.line(14, y, 196, y);
+    sectionTitle("AHA / JNC 8 reference (education)");
+    doc.setFontSize(8);
+    doc.setFont("helvetica", "bold");
+    doc.text("Category", margin, y);
+    doc.text("Systolic", margin + 58, y);
+    doc.text("Diastolic", margin + 110, y);
+    y += 4;
+    doc.setDrawColor(226, 232, 240);
+    doc.line(margin, y, margin + contentW, y);
+    y += 5;
+    doc.setFont("helvetica", "normal");
+    for (const row of ahaJnc8ReferenceRows) {
+      ensureSpace(8);
+      doc.text(row.category, margin, y);
+      doc.text(row.systolic, margin + 58, y);
+      doc.text(row.diastolic, margin + 110, y);
       y += 6;
+    }
+    y += 4;
 
+    sectionTitle("Recommendations (based on latest classification)");
+    doc.setFontSize(9);
+    const recLines: string[] = [
+      ...clinicalAdvice[latestCategory],
+      "Lifestyle: DASH-style nutrition, limit sodium, 150+ min/week activity, stress care, sleep 7–9h.",
+    ];
+    for (const line of recLines) {
+      const wrapped = doc.splitTextToSize(`• ${line}`, contentW - 4);
+      for (const wline of wrapped) {
+        ensureSpace(5);
+        doc.text(wline, margin + 2, y);
+        y += 5;
+      }
+    }
+    y += 4;
+
+    sectionTitle("Reading history");
+    doc.setFontSize(9);
+    if (readings.length === 0) {
+      doc.text("No readings available.", margin, y);
+      y += 6;
+    } else {
+      doc.setFont("helvetica", "bold");
+      doc.text("Timestamp", margin, y);
+      doc.text("Sys", margin + 78, y);
+      doc.text("Dia", margin + 92, y);
+      doc.text("Age", margin + 106, y);
+      doc.text("Category", margin + 122, y);
+      y += 4;
+      doc.setDrawColor(226, 232, 240);
+      doc.line(margin, y, margin + contentW, y);
+      y += 5;
+      doc.setFont("helvetica", "normal");
       for (const reading of readings) {
-        if (y > 275) {
-          doc.addPage();
-          y = 20;
-        }
-        doc.text(new Date(reading.createdAt).toLocaleString(), 14, y);
-        doc.text(String(reading.systolic), 88, y);
-        doc.text(String(reading.diastolic), 104, y);
-        doc.text(String(reading.age), 120, y);
-        doc.text(reading.category, 136, y);
-        y += 6;
+        const tsLines = doc.splitTextToSize(new Date(reading.createdAt).toLocaleString(), 62);
+        ensureSpace(Math.max(6, tsLines.length * 5 + 2));
+        doc.text(tsLines, margin, y);
+        doc.text(String(reading.systolic), margin + 78, y);
+        doc.text(String(reading.diastolic), margin + 92, y);
+        doc.text(String(reading.age), margin + 106, y);
+        doc.text(reading.category, margin + 122, y);
+        y += Math.max(6, tsLines.length * 5);
       }
     }
 
-    doc.save(`bp-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+    doc.save(`hypertension-buddy-report-${new Date().toISOString().slice(0, 10)}.pdf`);
   };
 
-  const addReading = (event: FormEvent) => {
+  const addReading = async (event: FormEvent) => {
     event.preventDefault();
+    if (!session?.user) return;
+
     const sys = Number(systolic);
     const dia = Number(diastolic);
     const age = Number(readingAge);
     if (!Number.isFinite(sys) || !Number.isFinite(dia) || !Number.isFinite(age)) return;
     if (sys < 70 || dia < 40 || age < 1) return;
 
+    setSaveError("");
+    const { data, error } = await supabase
+      .from("readings")
+      .insert({
+        user_id: session.user.id,
+        systolic: sys,
+        diastolic: dia,
+        pulse: age,
+      })
+      .select("id, systolic, diastolic, pulse, created_at")
+      .single();
+
+    if (error || !data) {
+      setSaveError(error?.message ?? "Could not save reading.");
+      return;
+    }
+
     const entry: Reading = {
-      id: crypto.randomUUID(),
-      systolic: sys,
-      diastolic: dia,
-      age,
-      category: categorizeReading(sys, dia),
-      createdAt: new Date().toISOString(),
+      id: data.id,
+      systolic: data.systolic,
+      diastolic: data.diastolic,
+      age: data.pulse,
+      category: categorizeReading(data.systolic, data.diastolic),
+      createdAt: data.created_at,
     };
 
     setReadings((prev) => [entry, ...prev]);
     setLatestSubmitted(entry);
+    setShowAddReadingModal(false);
     setShowResultModal(true);
     setSystolic("");
     setDiastolic("");
     setReadingAge("");
   };
 
-  const deleteReading = (id: string) => {
+  const deleteReading = async (id: string) => {
+    if (!session?.user) return;
+    const { error } = await supabase.from("readings").delete().eq("id", id).eq("user_id", session.user.id);
+    if (error) {
+      setSaveError(error.message);
+      return;
+    }
     setReadings((prev) => prev.filter((r) => r.id !== id));
   };
 
-  const handleLogin = (event: FormEvent) => {
+  const handleLogin = async (event: FormEvent) => {
     event.preventDefault();
     if (!loginEmail.trim() || !loginPassword.trim()) return;
-    const loginTimestamp = new Date().toISOString();
-    setLoginActivity((prev) => [loginTimestamp, ...prev].slice(0, 20));
-    setSession({ email: loginEmail.trim(), loggedIn: true });
+
+    setAuthMessage("");
+    if (authMode === "signup") {
+      const { error } = await supabase.auth.signUp({
+        email: loginEmail.trim(),
+        password: loginPassword,
+      });
+      if (error) {
+        setAuthMessage(error.message);
+        return;
+      }
+      setAuthMessage("Signup successful. Check your email to confirm your account.");
+      setLoginPassword("");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({
+      email: loginEmail.trim(),
+      password: loginPassword,
+    });
+    if (error) {
+      setAuthMessage(error.message);
+      return;
+    }
+
     setLoginPassword("");
+    setAuthMessage("");
     setActiveSection("Dashboard");
   };
 
-  const handleLogout = () => {
-    setSession(null);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
     setLoginPassword("");
+    setAuthMessage("");
     setActiveSection("Dashboard");
   };
 
-  const renderProfile = () => (
-    <section className="rounded-3xl bg-white p-6 shadow-xl ring-1 ring-blue-100">
-      <h2 className="text-xl font-semibold text-slate-900">Profile</h2>
-      <p className="mt-1 text-sm text-slate-500">Update your personal details for reporting.</p>
-      <div className="mt-5 grid gap-3 sm:max-w-md">
-        <input
-          value={profile.name}
-          onChange={(event) => setProfile((prev) => ({ ...prev, name: event.target.value }))}
-          className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
-          placeholder="Full Name"
-        />
-      </div>
+  const renderProfile = () => {
+    const u = session?.user;
+    const email = u?.email ?? "—";
+    const initials = getUserInitials(profile.name, email === "—" ? "" : email);
+    const memberSince = formatLongDate(u?.created_at);
+    const accountCreated = formatDateTimeLocal(u?.created_at);
+    const lastSignIn = formatDateTimeLocal(u?.last_sign_in_at);
 
-      <div className="mt-5 rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100">
-        <p className="text-sm font-semibold text-blue-700">Login Activity</p>
-        <p className="mt-2 text-sm text-slate-700">
-          Last Login:{" "}
-          <span className="rounded-full bg-blue-100 px-2.5 py-1 text-xs font-semibold text-blue-700">
-            {loginActivity[0]
-              ? new Date(loginActivity[0]).toLocaleString([], {
-                  year: "numeric",
-                  month: "long",
-                  day: "numeric",
-                  hour: "numeric",
-                  minute: "2-digit",
-                })
-              : "No login recorded yet"}
-          </span>
-        </p>
-        <div className="mt-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Recent Logins</p>
-          <ul className="mt-2 space-y-1 text-sm text-slate-600">
-            {loginActivity.slice(0, 3).map((item) => (
-              <li key={item}>- {new Date(item).toLocaleString()}</li>
-            ))}
-            {loginActivity.length === 0 ? <li>- No entries available</li> : null}
+    return (
+      <div className="space-y-6">
+        <section className={`${shellCardClass} overflow-hidden`}>
+          <div className="border-b border-slate-100 bg-gradient-to-br from-[#2563eb]/5 to-white px-6 py-8 sm:px-8">
+            <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
+              <div
+                className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-2xl font-semibold text-white shadow-[0_4px_20px_rgba(37,99,235,0.35)]"
+                aria-hidden
+              >
+                {initials}
+              </div>
+              <div className="text-center sm:text-left">
+                <h2 className="text-xl font-semibold text-slate-900">Your profile</h2>
+                <p className="mt-1 text-sm text-slate-600">{email}</p>
+                <p className="mt-2 text-sm text-slate-500">
+                  Member since <span className="font-medium text-slate-700">{memberSince}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="p-6 sm:p-8">
+            <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Display name (for reports)</label>
+            <input
+              value={profile.name}
+              onChange={(event) => setProfile((prev) => ({ ...prev, name: event.target.value }))}
+              className="mt-2 w-full max-w-md rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+              placeholder="Full name"
+            />
+          </div>
+        </section>
+
+        <section className={`${shellCardClass} p-6 sm:p-8`}>
+          <h3 className="text-lg font-semibold text-slate-900">Personal information</h3>
+          <p className="mt-1 text-sm text-slate-500">Account details from your secure session.</p>
+          <ul className="mt-6 divide-y divide-slate-100">
+            <li className="flex gap-4 py-4 first:pt-0">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
+                  />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</p>
+                <p className="mt-0.5 break-all text-sm font-medium text-slate-900">{email}</p>
+              </div>
+            </li>
+            <li className="flex gap-4 py-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
+                  />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Account created</p>
+                <p className="mt-0.5 text-sm font-medium text-slate-900">{accountCreated}</p>
+              </div>
+            </li>
+            <li className="flex gap-4 py-4">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last sign in</p>
+                <p className="mt-0.5 text-sm font-medium text-slate-900">{lastSignIn}</p>
+              </div>
+            </li>
+            <li className="flex gap-4 py-4 last:pb-0">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
+                  />
+                </svg>
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">User ID</p>
+                <p className="mt-0.5 break-all font-mono text-xs font-medium text-slate-800">{u?.id ?? "—"}</p>
+              </div>
+            </li>
           </ul>
-        </div>
+        </section>
       </div>
-    </section>
-  );
+    );
+  };
 
   const renderHistoryTable = () => (
-    <section className="rounded-3xl bg-white p-5 shadow-xl ring-1 ring-slate-100">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">History</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-slate-500">{readings.length} total readings</span>
-          <button
-            type="button"
-            onClick={downloadPdfReport}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Download PDF Report
-          </button>
+    <section className={`${shellCardClass} p-5 sm:p-6`}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900">History</h2>
+          <p className="text-sm text-slate-500">{readings.length} total readings</p>
         </div>
+        <button type="button" onClick={downloadPdfReport} className={`${primaryBtnClass} w-full sm:w-auto`}>
+          Download PDF report
+        </button>
       </div>
       <div className="mt-4 overflow-auto">
         <table className="w-full min-w-[680px] text-left text-sm">
@@ -437,14 +717,15 @@ export default function Home() {
           </tbody>
         </table>
         {readings.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">No saved readings in localStorage yet.</p>
+          <p className="mt-4 text-sm text-slate-500">No readings saved in Supabase yet.</p>
         ) : null}
+        {fetchError ? <p className="mt-3 text-sm text-red-600">Load error: {fetchError}</p> : null}
       </div>
     </section>
   );
 
   const renderHealthTips = () => (
-    <section className="rounded-3xl bg-white p-6 shadow-xl ring-1 ring-blue-100">
+    <section className={`${shellCardClass} p-6 sm:p-8`}>
       <h2 className="text-xl font-semibold text-slate-900">Health Tips</h2>
       <p className="mt-1 text-sm text-slate-500">
         Structured prevention plan for status:{" "}
@@ -452,8 +733,8 @@ export default function Home() {
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         {structuredTips.map((tip) => (
-          <article key={tip.title} className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100">
-            <h3 className="text-sm font-semibold text-blue-700">{tip.title}</h3>
+          <article key={tip.title} className="rounded-[12px] border border-slate-100 bg-slate-50/80 p-4">
+            <h3 className="text-sm font-semibold text-[#2563eb]">{tip.title}</h3>
             <ul className="mt-2 space-y-1 text-sm text-slate-700">
               {tip.points.map((point) => (
                 <li key={point}>- {point}</li>
@@ -465,18 +746,27 @@ export default function Home() {
     </section>
   );
 
+  const closeAddReadingModal = () => {
+    setShowAddReadingModal(false);
+    setSystolic("");
+    setDiastolic("");
+    setReadingAge("");
+    setSaveError("");
+  };
+
   const renderDashboard = () => (
     <>
-      <section className="rounded-3xl bg-white/90 p-6 shadow-xl ring-1 ring-blue-100 backdrop-blur">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      <section className={`${shellCardClass} p-6 sm:p-8`}>
+        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
           <div>
-            <h1 className="text-2xl font-semibold text-slate-900">Welcome back, {session?.email}</h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Patient: {displayName} | Professional monitoring with AHA trend insights.
+            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h1>
+            <p className="mt-1 text-sm text-slate-600">{session?.user.email}</p>
+            <p className="mt-2 text-sm text-slate-500">
+              Patient: <span className="font-medium text-slate-800">{displayName}</span> · AHA trend monitoring
             </p>
           </div>
-          <div className={`rounded-2xl p-4 ring-2 ${style.ring}`}>
-            <p className="text-xs uppercase tracking-wide text-slate-500">Current Status</p>
+          <div className={`${dataCardClass} max-w-full shrink-0 lg:max-w-xs ${style.ring} ring-2 ring-offset-2`}>
+            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Current status</p>
             <p className={`mt-1 text-xl font-semibold ${style.text}`}>{latestCategory}</p>
             {latestReading ? (
               <p className="mt-1 text-sm text-slate-600">
@@ -487,74 +777,47 @@ export default function Home() {
             )}
           </div>
         </div>
-
-        <form onSubmit={addReading} className="mt-6 grid gap-3 md:grid-cols-4">
-          <input
-            value={systolic}
-            onChange={(event) => setSystolic(event.target.value)}
-            type="number"
-            min={70}
-            className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
-            placeholder="Systolic"
-            required
-          />
-          <input
-            value={diastolic}
-            onChange={(event) => setDiastolic(event.target.value)}
-            type="number"
-            min={40}
-            className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
-            placeholder="Diastolic"
-            required
-          />
-          <input
-            value={readingAge}
-            onChange={(event) => setReadingAge(event.target.value)}
-            type="number"
-            min={1}
-            className="rounded-xl border border-blue-200 bg-white px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
-            placeholder="Age"
-            required
-          />
-          <button
-            type="submit"
-            className="rounded-xl bg-blue-600 px-5 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
-          >
-            Add Reading
-          </button>
-        </form>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {(["Normal", "Elevated", "Stage 1", "Stage 2"] as BpCategory[]).map((category) => (
           <div
             key={category}
-            className={`rounded-2xl bg-white p-4 shadow-lg ring-1 ring-slate-100 ${
-              latestCategory === category ? "ring-2 ring-offset-1" : ""
-            } ${categoryStyles[category].ring}`}
+            className={`${dataCardClass} ${
+              latestCategory === category ? `ring-2 ring-offset-2 ${categoryStyles[category].ring}` : ""
+            }`}
           >
             <div
               className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${categoryStyles[category].badge}`}
             >
               {category}
             </div>
-            <p className="mt-3 text-sm text-slate-600">{categoryStyles[category].note}</p>
+            <p className="mt-3 text-sm leading-relaxed text-slate-600">{categoryStyles[category].note}</p>
           </div>
         ))}
       </section>
 
-      <section className="rounded-3xl bg-white p-5 shadow-xl ring-1 ring-slate-100">
-        <div className="mb-3 flex items-center justify-between">
+      <div className="flex flex-col">
+        <button
+          type="button"
+          onClick={() => {
+            setSaveError("");
+            setShowAddReadingModal(true);
+          }}
+          className={`${primaryBtnClass} w-full lg:w-auto lg:self-start`}
+        >
+          + Add New Reading
+        </button>
+      </div>
+
+      <section className={`${shellCardClass} p-5 sm:p-6`}>
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900">Blood Pressure Trend</h2>
-            <p className="text-sm text-slate-500">Systolic and diastolic readings over time</p>
+            <h2 className="text-lg font-semibold text-slate-900">Blood pressure trend</h2>
+            <p className="text-sm text-slate-500">Systolic and diastolic over time</p>
           </div>
-          <button
-            type="button"
-            onClick={downloadPdfReport}
-            className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-          >
-            Download PDF Report
+          <button type="button" onClick={downloadPdfReport} className={`${primaryBtnClass} w-full sm:w-auto`}>
+            Download PDF report
           </button>
         </div>
         <div className="h-72 w-full min-w-0">
@@ -574,30 +837,30 @@ export default function Home() {
     </>
   );
 
-  if (!hydrated) return <div className="min-h-screen bg-blue-50" />;
+  if (authLoading) return <div className="min-h-screen bg-slate-50" />;
 
-  if (!session?.loggedIn) {
+  if (!session?.user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 via-white to-blue-100 p-6">
-        <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-2xl ring-1 ring-blue-100">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/80 p-6">
+        <div className={`w-full max-w-md ${shellCardClass} p-7 sm:p-8`}>
           <div className="mb-5 flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-600 text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2563eb] text-white shadow-md">
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5A4.5 4.5 0 0 1 6.5 4c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 12 7.15a6 6 0 0 1 1-1.06A5.93 5.93 0 0 1 17.5 4 4.5 4.5 0 0 1 22 8.5c0 3.78-3.4 6.86-8.55 11.54z" />
               </svg>
             </div>
             <div>
-              <p className="text-sm text-blue-600">Blood Pressure Pro</p>
+              <p className="text-sm font-medium text-[#2563eb]">Hypertension Buddy</p>
               <h1 className="text-xl font-semibold text-slate-900">Professional Login</h1>
             </div>
           </div>
-          <form onSubmit={handleLogin} className="space-y-3">
+          <form onSubmit={(event) => void handleLogin(event)} className="space-y-3">
             <input
               type="email"
               value={loginEmail}
               onChange={(event) => setLoginEmail(event.target.value)}
               placeholder="Email"
-              className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
+              className="w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
               required
             />
             <input
@@ -605,15 +868,23 @@ export default function Home() {
               value={loginPassword}
               onChange={(event) => setLoginPassword(event.target.value)}
               placeholder="Password"
-              className="w-full rounded-xl border border-blue-200 px-4 py-3 text-sm outline-none ring-blue-300 focus:ring"
+              className="w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
               required
             />
-            <button
-              type="submit"
-              className="w-full rounded-xl bg-blue-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-blue-700"
-            >
-              Login
+            <button type="submit" className={`${primaryBtnClass} w-full`}>
+              {authMode === "login" ? "Login" : "Create account"}
             </button>
+            <button
+              type="button"
+              className="w-full rounded-[12px] bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              onClick={() => {
+                setAuthMode((prev) => (prev === "login" ? "signup" : "login"));
+                setAuthMessage("");
+              }}
+            >
+              {authMode === "login" ? "Need an account? Sign up" : "Already have an account? Login"}
+            </button>
+            {authMessage ? <p className="text-sm text-blue-700">{authMessage}</p> : null}
           </form>
         </div>
       </div>
@@ -621,12 +892,95 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-blue-100 p-5 text-slate-800">
-      <div className="mx-auto grid w-full max-w-7xl gap-5 lg:grid-cols-[260px_1fr]">
-        <aside className="rounded-3xl bg-white/90 p-5 shadow-xl ring-1 ring-blue-100 backdrop-blur">
-          <div className="mb-6 rounded-2xl bg-gradient-to-r from-blue-600 to-blue-500 p-4 text-white shadow-lg">
-            <p className="text-xs uppercase tracking-wide text-blue-100">Blood Pressure Pro</p>
-            <h2 className="mt-1 text-lg font-semibold">Tracking Dashboard</h2>
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/60 text-slate-800">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md lg:hidden">
+        <button
+          type="button"
+          onClick={() => setMobileNavOpen(true)}
+          className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+          aria-label="Open menu"
+        >
+          <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <span className="truncate text-center text-sm font-semibold text-slate-900">Hypertension Buddy</span>
+        <span className="w-11 shrink-0" aria-hidden />
+      </header>
+
+      {mobileNavOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-slate-900/40 backdrop-blur-sm lg:hidden"
+          aria-label="Close menu"
+          onClick={() => setMobileNavOpen(false)}
+        />
+      ) : null}
+
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-[min(280px,88vw)] transform border-r border-slate-100 bg-white shadow-[4px_0_24px_rgba(15,23,42,0.08)] transition-transform duration-200 ease-out lg:hidden ${
+          mobileNavOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        <div className="flex h-full flex-col overflow-y-auto p-5">
+          <div className="mb-5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[#2563eb]">Hypertension Buddy</p>
+              <h2 className="mt-0.5 truncate text-lg font-semibold text-slate-900">Menu</h2>
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileNavOpen(false)}
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 text-slate-600 hover:bg-slate-50"
+              aria-label="Close menu"
+            >
+              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+          <nav className="space-y-2">
+            {sections.map((item) => (
+              <button
+                type="button"
+                key={item}
+                onClick={() => {
+                  setActiveSection(item);
+                  setMobileNavOpen(false);
+                }}
+                className={`w-full rounded-[12px] px-4 py-3 text-left text-sm font-medium transition ${
+                  activeSection === item
+                    ? "bg-[#2563eb] text-white shadow-md"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </nav>
+          <div className="mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Signed in</p>
+            <p className="mt-1 truncate text-sm font-medium text-slate-800">{session.user.email}</p>
+            <p className="mt-1 text-xs text-slate-500">{profile.name ? profile.name : "Name not set"}</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setMobileNavOpen(false);
+              void handleLogout();
+            }}
+            className="mt-auto w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100"
+          >
+            Logout
+          </button>
+        </div>
+      </aside>
+
+      <div className="mx-auto grid w-full max-w-7xl gap-5 p-4 sm:p-5 lg:grid-cols-[260px_1fr] lg:p-6">
+        <aside className={`${shellCardClass} hidden h-fit p-5 lg:block`}>
+          <div className="mb-6 rounded-[12px] bg-gradient-to-br from-[#2563eb] to-blue-600 p-4 text-white shadow-md">
+            <p className="text-xs uppercase tracking-wide text-white/90">Hypertension Buddy</p>
+            <h2 className="mt-1 text-lg font-semibold">Dashboard</h2>
           </div>
           <nav className="space-y-2">
             {sections.map((item) => (
@@ -634,31 +988,31 @@ export default function Home() {
                 type="button"
                 key={item}
                 onClick={() => setActiveSection(item)}
-                className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium transition ${
+                className={`w-full rounded-[12px] px-4 py-3 text-left text-sm font-medium transition ${
                   activeSection === item
-                    ? "bg-blue-600 text-white shadow-md"
-                    : "bg-blue-50 text-blue-700 hover:bg-blue-100"
+                    ? "bg-[#2563eb] text-white shadow-md"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
                 }`}
               >
                 {item}
               </button>
             ))}
           </nav>
-          <div className="mt-6 rounded-2xl bg-blue-50 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-blue-700">Logged In As</p>
-            <p className="mt-2 text-sm font-medium text-slate-700">{session.email}</p>
-            <p className="text-xs text-slate-500">Name: {profile.name || "Not set"}</p>
+          <div className="mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Signed in</p>
+            <p className="mt-2 truncate text-sm font-medium text-slate-800">{session.user.email}</p>
+            <p className="mt-1 text-xs text-slate-500">Name: {profile.name || "Not set"}</p>
           </div>
           <button
             type="button"
-            onClick={handleLogout}
-            className="mt-6 w-full rounded-xl bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100"
+            onClick={() => void handleLogout()}
+            className="mt-6 w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100"
           >
             Logout
           </button>
         </aside>
 
-        <main className="space-y-5">
+        <main className="min-w-0 space-y-5 pb-8 lg:pb-0">
           {activeSection === "Dashboard" && renderDashboard()}
           {activeSection === "Profile" && renderProfile()}
           {activeSection === "History" && renderHistoryTable()}
@@ -666,12 +1020,87 @@ export default function Home() {
         </main>
       </div>
 
+      {showAddReadingModal ? (
+        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4">
+          <div
+            className="relative w-full max-w-md rounded-t-[16px] bg-white shadow-2xl sm:rounded-[12px]"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="add-reading-title"
+          >
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 pb-4 pt-6 sm:px-8">
+              <h2 id="add-reading-title" className="text-lg font-semibold text-slate-900">
+                Enter Blood Pressure Reading
+              </h2>
+              <button
+                type="button"
+                onClick={closeAddReadingModal}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <form
+              className="space-y-4 px-6 py-6 sm:px-8"
+              onSubmit={(event) => void addReading(event)}
+            >
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Age</label>
+                <input
+                  value={readingAge}
+                  onChange={(event) => setReadingAge(event.target.value)}
+                  type="number"
+                  min={1}
+                  placeholder="22"
+                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Systolic</label>
+                <input
+                  value={systolic}
+                  onChange={(event) => setSystolic(event.target.value)}
+                  type="number"
+                  min={70}
+                  placeholder="180"
+                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Diastolic</label>
+                <input
+                  value={diastolic}
+                  onChange={(event) => setDiastolic(event.target.value)}
+                  type="number"
+                  min={40}
+                  placeholder="80"
+                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+                  required
+                />
+              </div>
+              {saveError ? <p className="text-sm text-red-600">{saveError}</p> : null}
+              <button type="submit" className={`${primaryBtnClass} w-full py-3.5`}>
+                Check My Blood Pressure
+              </button>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
       {showResultModal && latestSubmitted ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
-          <div className="w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl ring-1 ring-red-200">
-            <div className="bg-red-600 px-6 py-4 text-white">
-              <p className="text-xs uppercase tracking-wide text-red-100">Classification</p>
+          <div
+            className={`w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl ring-2 ring-offset-2 ${categoryStyles[latestSubmitted.category].ring}`}
+          >
+            <div className={`px-6 py-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}>
+              <p className="text-xs uppercase tracking-wide text-white/90">Hypertension Buddy · Classification</p>
               <h3 className="text-2xl font-semibold">{latestSubmitted.category}</h3>
+              <p className="mt-1 text-sm text-white/90">{categoryStyles[latestSubmitted.category].note}</p>
             </div>
             <div className="space-y-4 p-6">
               <div className="rounded-2xl bg-slate-50 p-4">
@@ -686,8 +1115,8 @@ export default function Home() {
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-blue-50 p-4">
-                <p className="text-sm font-semibold text-blue-700">Recommendation</p>
+              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100">
+                <p className="text-sm font-semibold text-blue-700">Clinical guidance</p>
                 <ul className="mt-2 space-y-1 text-sm text-slate-700">
                   {clinicalAdvice[latestSubmitted.category].map((item) => (
                     <li key={item}>- {item}</li>
@@ -695,8 +1124,19 @@ export default function Home() {
                 </ul>
               </div>
 
+              <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lifestyle plan</p>
+                <ul className="mt-2 space-y-1 text-sm text-slate-700">
+                  {structuredTips.slice(0, 4).map((tip) => (
+                    <li key={tip.title}>
+                      <span className="font-semibold text-slate-800">{tip.title}:</span> {tip.points[0]}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+
               <div className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                <p className="text-sm font-medium text-emerald-700">Reading saved to local storage</p>
+                <p className="text-sm font-medium text-emerald-700">Reading saved to Supabase</p>
                 <button
                   type="button"
                   onClick={downloadPdfReport}
