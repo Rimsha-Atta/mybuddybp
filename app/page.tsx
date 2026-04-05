@@ -13,7 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Eye, EyeOff } from "lucide-react";
+import { Activity, Eye, EyeOff, Heart, Moon, Sun, User } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type Profile = {
@@ -187,13 +187,16 @@ const structuredTips = [
 ];
 
 const dataCardClass =
-  "rounded-[12px] border border-slate-100 bg-white p-5 shadow-[0_2px_16px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_4px_24px_rgba(37,99,235,0.08)]";
+  "rounded-[12px] border border-slate-100 bg-white p-5 shadow-[0_2px_16px_rgba(15,23,42,0.06)] transition-shadow hover:shadow-[0_4px_24px_rgba(37,99,235,0.08)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none dark:hover:shadow-lg dark:hover:shadow-black/30";
 
 const shellCardClass =
-  "rounded-[12px] border border-slate-100 bg-white shadow-[0_2px_20px_rgba(15,23,42,0.06)]";
+  "rounded-[12px] border border-slate-100 bg-white shadow-[0_2px_20px_rgba(15,23,42,0.06)] dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none";
 
 const primaryBtnClass =
-  "rounded-[12px] bg-[#2563eb] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2";
+  "rounded-xl bg-[#2563eb] px-5 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#2563eb] focus-visible:ring-offset-2 focus-visible:ring-offset-white dark:focus-visible:ring-offset-zinc-900";
+
+const bpFormCardClass =
+  "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-[#252525]";
 
 function getUserInitials(name: string, email: string): string {
   const n = name.trim();
@@ -226,6 +229,8 @@ function formatDateTimeLocal(d: string | undefined): string {
     return "—";
   }
 }
+
+const THEME_STORAGE_KEY = "hb-theme";
 
 const INVALID_EMAIL_MSG = "Please enter a valid email address.";
 
@@ -266,6 +271,7 @@ export default function Home() {
   const [bpFormWarning, setBpFormWarning] = useState("");
   const [fetchError, setFetchError] = useState("");
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
+  const [darkMode, setDarkMode] = useState(false);
 
   const fetchReadings = async (userId: string) => {
     const { data, error } = await supabase
@@ -327,6 +333,25 @@ export default function Home() {
     const t = window.setTimeout(() => setSaveSuccessToast(false), 3200);
     return () => window.clearTimeout(t);
   }, [saveSuccessToast]);
+
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(THEME_STORAGE_KEY);
+      if (stored === "dark") setDarkMode(true);
+      else if (stored === "light") setDarkMode(false);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle("dark", darkMode);
+    try {
+      localStorage.setItem(THEME_STORAGE_KEY, darkMode ? "dark" : "light");
+    } catch {
+      /* ignore */
+    }
+  }, [darkMode]);
 
   const latestReading = readings[0];
   const latestCategory = latestReading?.category ?? "Normal";
@@ -610,7 +635,7 @@ export default function Home() {
     return (
       <div className="space-y-6">
         <section className={`${shellCardClass} overflow-hidden`}>
-          <div className="border-b border-slate-100 bg-gradient-to-br from-[#2563eb]/5 to-white px-6 py-8 sm:px-8">
+          <div className="border-b border-slate-100 bg-gradient-to-br from-[#2563eb]/5 to-white px-6 py-8 dark:border-zinc-800 dark:from-[#2563eb]/15 dark:to-zinc-900 sm:px-8">
             <div className="flex flex-col items-center gap-5 sm:flex-row sm:items-center sm:gap-6">
               <div
                 className="flex h-24 w-24 shrink-0 items-center justify-center rounded-full bg-[#2563eb] text-2xl font-semibold text-white shadow-[0_4px_20px_rgba(37,99,235,0.35)]"
@@ -619,31 +644,33 @@ export default function Home() {
                 {initials}
               </div>
               <div className="text-center sm:text-left">
-                <h2 className="text-xl font-semibold text-slate-900">Your profile</h2>
-                <p className="mt-1 text-sm text-slate-600">{email}</p>
-                <p className="mt-2 text-sm text-slate-500">
-                  Member since <span className="font-medium text-slate-700">{memberSince}</span>
+                <h2 className="text-xl font-semibold text-slate-900 dark:text-zinc-50">Your profile</h2>
+                <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">{email}</p>
+                <p className="mt-2 text-sm text-slate-500 dark:text-zinc-400">
+                  Member since <span className="font-medium text-slate-700 dark:text-zinc-200">{memberSince}</span>
                 </p>
               </div>
             </div>
           </div>
           <div className="p-6 sm:p-8">
-            <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Display name (for reports)</label>
+            <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+              Display name (for reports)
+            </label>
             <input
               value={profile.name}
               onChange={(event) => setProfile((prev) => ({ ...prev, name: event.target.value }))}
-              className="mt-2 w-full max-w-md rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+              className="mt-2 w-full max-w-md rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50"
               placeholder="Full name"
             />
           </div>
         </section>
 
         <section className={`${shellCardClass} p-6 sm:p-8`}>
-          <h3 className="text-lg font-semibold text-slate-900">Personal information</h3>
-          <p className="mt-1 text-sm text-slate-500">Account details from your secure session.</p>
-          <ul className="mt-6 divide-y divide-slate-100">
+          <h3 className="text-lg font-semibold text-slate-900 dark:text-zinc-50">Personal information</h3>
+          <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">Account details from your secure session.</p>
+          <ul className="mt-6 divide-y divide-slate-100 dark:divide-zinc-800">
             <li className="flex gap-4 py-4 first:pt-0">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb] dark:bg-blue-500/20 dark:text-blue-400">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path
                     strokeLinecap="round"
@@ -654,12 +681,12 @@ export default function Home() {
                 </svg>
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Email</p>
-                <p className="mt-0.5 break-all text-sm font-medium text-slate-900">{email}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">Email</p>
+                <p className="mt-0.5 break-all text-sm font-medium text-slate-900 dark:text-zinc-50">{email}</p>
               </div>
             </li>
             <li className="flex gap-4 py-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb] dark:bg-blue-500/20 dark:text-blue-400">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path
                     strokeLinecap="round"
@@ -670,12 +697,12 @@ export default function Home() {
                 </svg>
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Account created</p>
-                <p className="mt-0.5 text-sm font-medium text-slate-900">{accountCreated}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">Account created</p>
+                <p className="mt-0.5 text-sm font-medium text-slate-900 dark:text-zinc-50">{accountCreated}</p>
               </div>
             </li>
             <li className="flex gap-4 py-4">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb] dark:bg-blue-500/20 dark:text-blue-400">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path
                     strokeLinecap="round"
@@ -686,12 +713,12 @@ export default function Home() {
                 </svg>
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Last sign in</p>
-                <p className="mt-0.5 text-sm font-medium text-slate-900">{lastSignIn}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">Last sign in</p>
+                <p className="mt-0.5 text-sm font-medium text-slate-900 dark:text-zinc-50">{lastSignIn}</p>
               </div>
             </li>
             <li className="flex gap-4 py-4 last:pb-0">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb]">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] bg-[#2563eb]/10 text-[#2563eb] dark:bg-blue-500/20 dark:text-blue-400">
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
                   <path
                     strokeLinecap="round"
@@ -702,8 +729,8 @@ export default function Home() {
                 </svg>
               </span>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">User ID</p>
-                <p className="mt-0.5 break-all font-mono text-xs font-medium text-slate-800">{u?.id ?? "—"}</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">User ID</p>
+                <p className="mt-0.5 break-all font-mono text-xs font-medium text-slate-800 dark:text-zinc-200">{u?.id ?? "—"}</p>
               </div>
             </li>
           </ul>
@@ -716,8 +743,8 @@ export default function Home() {
     <section className={`${shellCardClass} p-5 sm:p-6`}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-slate-900">History</h2>
-          <p className="text-sm text-slate-500">{readings.length} total readings</p>
+          <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-50">History</h2>
+          <p className="text-sm text-slate-500 dark:text-zinc-400">{readings.length} total readings</p>
         </div>
         <button type="button" onClick={downloadPdfReport} className={`${primaryBtnClass} w-full sm:w-auto`}>
           Download PDF report
@@ -726,7 +753,7 @@ export default function Home() {
       <div className="mt-4 overflow-auto">
         <table className="w-full min-w-[680px] text-left text-sm">
           <thead>
-            <tr className="border-b border-slate-200 text-slate-500">
+            <tr className="border-b border-slate-200 text-slate-500 dark:border-zinc-700 dark:text-zinc-400">
               <th className="px-3 py-2 font-medium">Timestamp</th>
               <th className="px-3 py-2 font-medium">Systolic</th>
               <th className="px-3 py-2 font-medium">Diastolic</th>
@@ -737,11 +764,13 @@ export default function Home() {
           </thead>
           <tbody>
             {readings.map((reading) => (
-              <tr key={reading.id} className="border-b border-slate-100">
-                <td className="px-3 py-2 text-slate-600">{new Date(reading.createdAt).toLocaleString()}</td>
-                <td className="px-3 py-2 font-semibold text-blue-700">{reading.systolic}</td>
-                <td className="px-3 py-2 font-semibold text-orange-600">{reading.diastolic}</td>
-                <td className="px-3 py-2 text-slate-700">{reading.age}</td>
+              <tr key={reading.id} className="border-b border-slate-100 dark:border-zinc-800">
+                <td className="px-3 py-2 text-slate-600 dark:text-zinc-300">
+                  {new Date(reading.createdAt).toLocaleString()}
+                </td>
+                <td className="px-3 py-2 font-semibold text-blue-700 dark:text-blue-400">{reading.systolic}</td>
+                <td className="px-3 py-2 font-semibold text-orange-600 dark:text-orange-400">{reading.diastolic}</td>
+                <td className="px-3 py-2 text-slate-700 dark:text-zinc-300">{reading.age}</td>
                 <td className="px-3 py-2">
                   <span
                     className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${categoryStyles[reading.category].badge}`}
@@ -753,7 +782,7 @@ export default function Home() {
                   <button
                     type="button"
                     onClick={() => deleteReading(reading.id)}
-                    className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100"
+                    className="rounded-lg bg-red-50 p-2 text-red-600 hover:bg-red-100 dark:bg-red-950/50 dark:text-red-400 dark:hover:bg-red-950/70"
                     aria-label="Delete reading"
                   >
                     <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
@@ -766,25 +795,30 @@ export default function Home() {
           </tbody>
         </table>
         {readings.length === 0 ? (
-          <p className="mt-4 text-sm text-slate-500">No readings saved in Supabase yet.</p>
+          <p className="mt-4 text-sm text-slate-500 dark:text-zinc-400">No readings saved in Supabase yet.</p>
         ) : null}
-        {fetchError ? <p className="mt-3 text-sm text-red-600">Load error: {fetchError}</p> : null}
+        {fetchError ? (
+          <p className="mt-3 text-sm text-red-600 dark:text-red-400">Load error: {fetchError}</p>
+        ) : null}
       </div>
     </section>
   );
 
   const renderHealthTips = () => (
     <section className={`${shellCardClass} p-6 sm:p-8`}>
-      <h2 className="text-xl font-semibold text-slate-900">Health Tips</h2>
-      <p className="mt-1 text-sm text-slate-500">
+      <h2 className="text-xl font-semibold text-slate-900 dark:text-zinc-50">Health Tips</h2>
+      <p className="mt-1 text-sm text-slate-500 dark:text-zinc-400">
         Structured prevention plan for status:{" "}
         <span className={`font-semibold ${categoryStyles[latestCategory].text}`}>{latestCategory}</span>
       </p>
       <div className="mt-5 grid gap-4 md:grid-cols-2">
         {structuredTips.map((tip) => (
-          <article key={tip.title} className="rounded-[12px] border border-slate-100 bg-slate-50/80 p-4">
-            <h3 className="text-sm font-semibold text-[#2563eb]">{tip.title}</h3>
-            <ul className="mt-2 space-y-1 text-sm text-slate-700">
+          <article
+            key={tip.title}
+            className="rounded-[12px] border border-slate-100 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/50"
+          >
+            <h3 className="text-sm font-semibold text-[#2563eb] dark:text-blue-400">{tip.title}</h3>
+            <ul className="mt-2 space-y-1 text-sm text-slate-700 dark:text-zinc-300">
               {tip.points.map((point) => (
                 <li key={point}>- {point}</li>
               ))}
@@ -804,95 +838,99 @@ export default function Home() {
     setBpFormWarning("");
   };
 
-  const renderDashboard = () => (
-    <>
-      <section className={`${shellCardClass} p-6 sm:p-8`}>
-        <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h1>
-            <p className="mt-1 text-sm text-slate-600">{session?.user.email}</p>
-            <p className="mt-2 text-sm text-slate-500">
-              Patient: <span className="font-medium text-slate-800">{displayName}</span> · AHA trend monitoring
-            </p>
-          </div>
-          <div className={`${dataCardClass} max-w-full shrink-0 lg:max-w-xs ${style.ring} ring-2 ring-offset-2`}>
-            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Current status</p>
-            <p className={`mt-1 text-xl font-semibold ${style.text}`}>{latestCategory}</p>
-            {latestReading ? (
-              <p className="mt-1 text-sm text-slate-600">
-                {latestReading.systolic}/{latestReading.diastolic} mmHg
-              </p>
-            ) : (
-              <p className="mt-1 text-sm text-slate-600">No readings yet</p>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        {(["Normal", "Elevated", "Stage 1", "Stage 2"] as BpCategory[]).map((category) => (
-          <div
-            key={category}
-            className={`${dataCardClass} ${
-              latestCategory === category ? `ring-2 ring-offset-2 ${categoryStyles[category].ring}` : ""
-            }`}
-          >
+  const renderDashboard = () => {
+    const axisColor = darkMode ? "#a1a1aa" : "#64748b";
+    const gridStroke = darkMode ? "#3f3f46" : "#dbeafe";
+    return (
+      <>
+        <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {(["Normal", "Elevated", "Stage 1", "Stage 2"] as BpCategory[]).map((category) => (
             <div
-              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${categoryStyles[category].badge}`}
+              key={category}
+              className={`${dataCardClass} ${
+                latestCategory === category ? `ring-2 ring-offset-2 ring-offset-white dark:ring-offset-zinc-950 ${categoryStyles[category].ring}` : ""
+              }`}
             >
-              {category}
+              <div
+                className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold ${categoryStyles[category].badge}`}
+              >
+                {category}
+              </div>
+              <p className="mt-3 text-sm leading-relaxed text-slate-600 dark:text-zinc-300">
+                {categoryStyles[category].note}
+              </p>
             </div>
-            <p className="mt-3 text-sm leading-relaxed text-slate-600">{categoryStyles[category].note}</p>
-          </div>
-        ))}
-      </section>
+          ))}
+        </section>
 
-      <div className="flex flex-col">
-        <button
-          type="button"
-          onClick={() => {
-            setSaveError("");
-            setBpFormWarning("");
-            setShowAddReadingModal(true);
-          }}
-          className={`${primaryBtnClass} w-full lg:w-auto lg:self-start`}
-        >
-          + Add New Reading
-        </button>
-      </div>
-
-      <section className={`${shellCardClass} p-5 sm:p-6`}>
-        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <h2 className="text-lg font-semibold text-slate-900">Blood pressure trend</h2>
-            <p className="text-sm text-slate-500">Systolic and diastolic over time</p>
-          </div>
-          <button type="button" onClick={downloadPdfReport} className={`${primaryBtnClass} w-full sm:w-auto`}>
-            Download PDF report
+        <div className="flex flex-col">
+          <button
+            type="button"
+            onClick={() => {
+              setSaveError("");
+              setBpFormWarning("");
+              setShowAddReadingModal(true);
+            }}
+            className={`${primaryBtnClass} w-full lg:w-auto lg:self-start`}
+          >
+            + Add New Reading
           </button>
         </div>
-        <div className="h-72 w-full min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#dbeafe" />
-              <XAxis dataKey="time" tick={{ fontSize: 12 }} />
-              <YAxis domain={[40, 200]} tick={{ fontSize: 12 }} />
-              <Tooltip />
-              <Legend />
-              <Line type="monotone" dataKey="systolic" stroke="#2563eb" strokeWidth={3} dot />
-              <Line type="monotone" dataKey="diastolic" stroke="#f97316" strokeWidth={3} dot />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
-    </>
-  );
 
-  if (authLoading) return <div className="min-h-screen bg-slate-50" />;
+        <section className={`${shellCardClass} p-5 sm:p-6`}>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900 dark:text-zinc-50">Blood pressure trend</h2>
+              <p className="text-sm text-slate-500 dark:text-zinc-400">Systolic and diastolic over time</p>
+            </div>
+            <button type="button" onClick={downloadPdfReport} className={`${primaryBtnClass} w-full sm:w-auto`}>
+              Download PDF report
+            </button>
+          </div>
+          <div className="h-72 w-full min-w-0">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke={gridStroke} />
+                <XAxis dataKey="time" tick={{ fontSize: 12, fill: axisColor }} />
+                <YAxis domain={[40, 200]} tick={{ fontSize: 12, fill: axisColor }} />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: darkMode ? "#27272a" : "#fff",
+                    border: darkMode ? "1px solid #3f3f46" : "1px solid #e2e8f0",
+                    borderRadius: 12,
+                    color: darkMode ? "#fafafa" : "#0f172a",
+                  }}
+                />
+                <Legend wrapperStyle={{ color: axisColor }} />
+                <Line type="monotone" dataKey="systolic" stroke="#2563eb" strokeWidth={3} dot />
+                <Line type="monotone" dataKey="diastolic" stroke="#f97316" strokeWidth={3} dot />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        </section>
+      </>
+    );
+  };
+
+  if (authLoading) return <div className="min-h-screen bg-slate-50 dark:bg-zinc-950" />;
+
+  const themeToggle = (
+    <button
+      type="button"
+      onClick={() => setDarkMode((d) => !d)}
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+      aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+    >
+      {darkMode ? <Sun className="h-5 w-5" strokeWidth={2} /> : <Moon className="h-5 w-5" strokeWidth={2} />}
+    </button>
+  );
 
   if (!session?.user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/80 px-4 py-6 sm:px-6">
+      <div className="relative flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/80 px-4 py-6 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 sm:px-6">
+        <div className="fixed right-4 top-[max(12px,env(safe-area-inset-top,0px))] z-50 sm:right-5 sm:top-5">
+          {themeToggle}
+        </div>
         <div className={`mx-auto w-[90%] max-w-md ${shellCardClass} p-6 sm:p-8`}>
           <div className="mb-6 flex flex-col items-center text-center">
             <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2563eb] text-white shadow-md">
@@ -900,8 +938,8 @@ export default function Home() {
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5A4.5 4.5 0 0 1 6.5 4c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 12 7.15a6 6 0 0 1 1-1.06A5.93 5.93 0 0 1 17.5 4 4.5 4.5 0 0 1 22 8.5c0 3.78-3.4 6.86-8.55 11.54z" />
               </svg>
             </div>
-            <p className="mt-3 text-sm font-medium text-[#2563eb]">Hypertension Buddy</p>
-            <h1 className="mt-1 text-xl font-semibold text-slate-900">Professional Login</h1>
+            <p className="mt-3 text-sm font-medium text-[#2563eb] dark:text-blue-400">Hypertension Buddy</p>
+            <h1 className="mt-1 text-xl font-semibold text-slate-900 dark:text-zinc-50">Professional Login</h1>
           </div>
           <form
             onSubmit={(event) => void handleLogin(event)}
@@ -917,7 +955,7 @@ export default function Home() {
                 if (authMessage === INVALID_EMAIL_MSG) setAuthMessage("");
               }}
               placeholder="Email"
-              className="login-email-input w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 placeholder:text-gray-500 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+              className="login-email-input w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 placeholder:text-gray-500 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder:text-zinc-500"
               required
             />
             <div className="relative isolate">
@@ -927,7 +965,7 @@ export default function Home() {
                 value={loginPassword}
                 onChange={(event) => setLoginPassword(event.target.value)}
                 placeholder="Password"
-                className="login-password-input w-full rounded-[12px] border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm text-neutral-900 placeholder:text-gray-500 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+                className="login-password-input w-full rounded-[12px] border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm text-neutral-900 placeholder:text-gray-500 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-50 dark:placeholder:text-zinc-500"
                 required
               />
               <button
@@ -936,7 +974,7 @@ export default function Home() {
                   e.preventDefault();
                   setShowLoginPassword((v) => !v);
                 }}
-                className="absolute right-1.5 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 shrink-0 items-center justify-center rounded-lg text-gray-700 transition hover:bg-slate-100 hover:text-gray-900 active:scale-95"
+                className="absolute right-1.5 top-1/2 z-10 flex h-10 w-10 -translate-y-1/2 shrink-0 items-center justify-center rounded-lg text-gray-700 transition hover:bg-slate-100 hover:text-gray-900 active:scale-95 dark:text-zinc-300 dark:hover:bg-zinc-700 dark:hover:text-white"
                 aria-label={showLoginPassword ? "Hide password" : "Show password"}
                 aria-pressed={showLoginPassword}
               >
@@ -952,7 +990,7 @@ export default function Home() {
             </button>
             <button
               type="button"
-              className="mx-auto w-full max-w-full rounded-[12px] bg-slate-100 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              className="mx-auto w-full max-w-full rounded-[12px] bg-slate-100 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
               onClick={() => {
                 setAuthMode((prev) => (prev === "login" ? "signup" : "login"));
                 setAuthMessage("");
@@ -964,7 +1002,9 @@ export default function Home() {
             {authMessage ? (
               <p
                 className={`text-center text-sm font-medium ${
-                  authMessage === INVALID_EMAIL_MSG ? "text-red-600" : "text-blue-700"
+                  authMessage === INVALID_EMAIL_MSG
+                    ? "text-red-600 dark:text-red-400"
+                    : "text-blue-700 dark:text-blue-300"
                 }`}
                 role={authMessage === INVALID_EMAIL_MSG ? "alert" : undefined}
               >
@@ -978,10 +1018,14 @@ export default function Home() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/60 text-slate-800">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/60 text-slate-800 dark:from-zinc-950 dark:via-zinc-900 dark:to-zinc-950 dark:text-zinc-100">
+      <div className="fixed right-4 top-[max(12px,env(safe-area-inset-top,0px))] z-[45] sm:right-5 sm:top-5">
+        {themeToggle}
+      </div>
+
       {saveSuccessToast ? (
         <div
-          className="fixed left-1/2 top-4 z-[80] flex max-w-[min(90vw,360px)] items-center gap-2 rounded-[12px] border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-lg ring-1 ring-emerald-100"
+          className="fixed left-1/2 top-4 z-[80] flex max-w-[min(90vw,360px)] items-center gap-2 rounded-[12px] border border-emerald-200 bg-white px-4 py-3 text-sm font-semibold text-emerald-800 shadow-lg ring-1 ring-emerald-100 dark:border-emerald-800 dark:bg-zinc-800 dark:text-emerald-300 dark:ring-emerald-900"
           style={{ animation: "success-toast-in 0.35s ease-out both" }}
           role="status"
           aria-live="polite"
@@ -999,18 +1043,18 @@ export default function Home() {
         </div>
       ) : null}
 
-      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 shadow-sm backdrop-blur-md lg:hidden">
+      <header className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 pr-16 shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90 lg:hidden">
         <button
           type="button"
           onClick={() => setMobileNavOpen(true)}
-          className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50"
+          className="flex h-11 w-11 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
           aria-label="Open menu"
         >
           <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
-        <span className="truncate text-center text-sm font-semibold text-slate-900">Hypertension Buddy</span>
+        <span className="truncate text-center text-sm font-semibold text-slate-900 dark:text-zinc-50">Hypertension Buddy</span>
         <span className="w-11 shrink-0" aria-hidden />
       </header>
 
@@ -1024,7 +1068,7 @@ export default function Home() {
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[min(280px,88vw)] transform border-r border-slate-100 bg-white shadow-[4px_0_24px_rgba(15,23,42,0.08)] transition-transform duration-200 ease-out lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-[min(280px,88vw)] transform border-r border-slate-100 bg-white shadow-[4px_0_24px_rgba(15,23,42,0.08)] transition-transform duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/40 lg:hidden ${
           mobileNavOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -1032,12 +1076,12 @@ export default function Home() {
           <div className="mb-5 flex items-center justify-between gap-2">
             <div className="min-w-0">
               <p className="text-xs font-semibold uppercase tracking-wide text-[#2563eb]">Hypertension Buddy</p>
-              <h2 className="mt-0.5 truncate text-lg font-semibold text-slate-900">Menu</h2>
+              <h2 className="mt-0.5 truncate text-lg font-semibold text-slate-900 dark:text-zinc-50">Menu</h2>
             </div>
             <button
               type="button"
               onClick={() => setMobileNavOpen(false)}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 text-slate-600 hover:bg-slate-50"
+              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800"
               aria-label="Close menu"
             >
               <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -1057,17 +1101,17 @@ export default function Home() {
                 className={`w-full rounded-[12px] px-4 py-3 text-left text-sm font-medium transition ${
                   activeSection === item
                     ? "bg-[#2563eb] text-white shadow-md"
-                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                 }`}
               >
                 {item}
               </button>
             ))}
           </nav>
-          <div className="mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Signed in</p>
-            <p className="mt-1 truncate text-sm font-medium text-slate-800">{session.user.email}</p>
-            <p className="mt-1 text-xs text-slate-500">{profile.name ? profile.name : "Name not set"}</p>
+          <div className="mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">Signed in</p>
+            <p className="mt-1 truncate text-sm font-medium text-slate-800 dark:text-zinc-100">{session.user.email}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">{profile.name ? profile.name : "Name not set"}</p>
           </div>
           <button
             type="button"
@@ -1075,7 +1119,7 @@ export default function Home() {
               setMobileNavOpen(false);
               void handleLogout();
             }}
-            className="mt-auto w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100"
+            className="mt-auto w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
           >
             Logout
           </button>
@@ -1097,22 +1141,22 @@ export default function Home() {
                 className={`w-full rounded-[12px] px-4 py-3 text-left text-sm font-medium transition ${
                   activeSection === item
                     ? "bg-[#2563eb] text-white shadow-md"
-                    : "bg-slate-50 text-slate-700 hover:bg-slate-100"
+                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                 }`}
               >
                 {item}
               </button>
             ))}
           </nav>
-          <div className="mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Signed in</p>
-            <p className="mt-2 truncate text-sm font-medium text-slate-800">{session.user.email}</p>
-            <p className="mt-1 text-xs text-slate-500">Name: {profile.name || "Not set"}</p>
+          <div className="mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/50">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">Signed in</p>
+            <p className="mt-2 truncate text-sm font-medium text-slate-800 dark:text-zinc-100">{session.user.email}</p>
+            <p className="mt-1 text-xs text-slate-500 dark:text-zinc-400">Name: {profile.name || "Not set"}</p>
           </div>
           <button
             type="button"
             onClick={() => void handleLogout()}
-            className="mt-6 w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100"
+            className="mt-6 w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 transition hover:bg-red-100 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60"
           >
             Logout
           </button>
@@ -1127,21 +1171,21 @@ export default function Home() {
       </div>
 
       {showAddReadingModal ? (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-900/50 px-4 py-6">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-900/50 px-4 py-6 dark:bg-black/60">
           <div
-            className="relative mx-auto w-[90%] max-w-[400px] rounded-[12px] bg-white shadow-2xl"
+            className="relative mx-auto w-[90%] max-w-[400px] rounded-xl border border-slate-200/80 bg-white shadow-2xl dark:border-zinc-700 dark:bg-zinc-900"
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-reading-title"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
-              <h2 id="add-reading-title" className="pr-2 text-lg font-semibold text-slate-900">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6 dark:border-zinc-800">
+              <h2 id="add-reading-title" className="pr-2 text-lg font-semibold text-slate-900 dark:text-zinc-50">
                 Enter Blood Pressure Reading
               </h2>
               <button
                 type="button"
                 onClick={closeAddReadingModal}
-                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] text-slate-500 transition hover:bg-slate-100 hover:text-slate-800"
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-slate-500 transition hover:bg-slate-100 hover:text-slate-800 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
                 aria-label="Close"
               >
                 <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
@@ -1149,67 +1193,98 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <form className="space-y-4 p-6" onSubmit={(event) => void addReading(event)}>
-              <div>
-                <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Age</label>
-                <input
-                  value={readingAge}
-                  onChange={(event) => {
-                    setReadingAge(event.target.value);
-                    setBpFormWarning("");
-                  }}
-                  type="number"
-                  min={1}
-                  placeholder="22"
-                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-                />
+            <form className="p-6" onSubmit={(event) => void addReading(event)}>
+              <div className={`${bpFormCardClass} space-y-4`}>
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                    Age
+                  </label>
+                  <div className="relative mt-1.5">
+                    <User
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-zinc-500"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <input
+                      value={readingAge}
+                      onChange={(event) => {
+                        setReadingAge(event.target.value);
+                        setBpFormWarning("");
+                      }}
+                      type="number"
+                      min={1}
+                      placeholder="22"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-neutral-900 caret-neutral-900 outline-none transition placeholder:text-gray-500 focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                    Systolic
+                  </label>
+                  <div className="relative mt-1.5">
+                    <Heart
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-zinc-500"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <input
+                      value={systolic}
+                      onChange={(event) => {
+                        setSystolic(event.target.value);
+                        setBpFormWarning("");
+                      }}
+                      type="number"
+                      min={70}
+                      placeholder="120"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-neutral-900 caret-neutral-900 outline-none transition placeholder:text-gray-500 focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                    Diastolic
+                  </label>
+                  <div className="relative mt-1.5">
+                    <Activity
+                      className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400 dark:text-zinc-500"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <input
+                      value={diastolic}
+                      onChange={(event) => {
+                        setDiastolic(event.target.value);
+                        setBpFormWarning("");
+                      }}
+                      type="number"
+                      min={40}
+                      placeholder="80"
+                      className="w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-neutral-900 caret-neutral-900 outline-none transition placeholder:text-gray-500 focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:placeholder:text-zinc-500"
+                    />
+                  </div>
+                </div>
+                {bpFormWarning ? (
+                  <p className="text-sm font-medium text-amber-700 dark:text-amber-400" role="alert">
+                    {bpFormWarning}
+                  </p>
+                ) : null}
+                {saveError ? (
+                  <p className="text-sm text-red-600 dark:text-red-400">{saveError}</p>
+                ) : null}
+                <button type="submit" className={`${primaryBtnClass} w-full rounded-xl py-3.5`}>
+                  Save Reading
+                </button>
               </div>
-              <div>
-                <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Systolic</label>
-                <input
-                  value={systolic}
-                  onChange={(event) => {
-                    setSystolic(event.target.value);
-                    setBpFormWarning("");
-                  }}
-                  type="number"
-                  min={70}
-                  placeholder="120"
-                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Diastolic</label>
-                <input
-                  value={diastolic}
-                  onChange={(event) => {
-                    setDiastolic(event.target.value);
-                    setBpFormWarning("");
-                  }}
-                  type="number"
-                  min={40}
-                  placeholder="80"
-                  className="mt-1.5 w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-neutral-900 caret-neutral-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-                />
-              </div>
-              {bpFormWarning ? (
-                <p className="text-sm font-medium text-amber-700" role="alert">
-                  {bpFormWarning}
-                </p>
-              ) : null}
-              {saveError ? <p className="text-sm text-red-600">{saveError}</p> : null}
-              <button type="submit" className={`${primaryBtnClass} w-full py-3.5`}>
-                Check My Blood Pressure
-              </button>
             </form>
           </div>
         </div>
       ) : null}
 
       {showResultModal && latestSubmitted ? (
-        <div className="fixed inset-0 z-[65] flex items-center justify-center overflow-y-auto bg-slate-900/45 px-4 py-6">
+        <div className="fixed inset-0 z-[65] flex items-center justify-center overflow-y-auto bg-slate-900/45 px-4 py-6 dark:bg-black/55">
           <div
-            className={`mx-auto w-[90%] max-w-[400px] max-h-[min(85vh,640px)] overflow-y-auto rounded-[12px] bg-white shadow-2xl ring-2 ring-offset-2 ${categoryStyles[latestSubmitted.category].ring}`}
+            className={`mx-auto w-[90%] max-w-[400px] max-h-[min(85vh,640px)] overflow-y-auto rounded-[12px] bg-white shadow-2xl ring-2 ring-offset-2 ring-offset-white dark:bg-zinc-900 dark:ring-offset-zinc-950 ${categoryStyles[latestSubmitted.category].ring}`}
           >
             <div className={`p-6 pb-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}>
               <p className="text-xs uppercase tracking-wide text-white/90">Hypertension Buddy · Classification</p>
@@ -1217,7 +1292,7 @@ export default function Home() {
               <p className="mt-1 text-sm text-white/90">{categoryStyles[latestSubmitted.category].note}</p>
             </div>
             <div
-              className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50 px-6 py-3 text-sm font-semibold text-emerald-800"
+              className="flex items-center gap-2 border-b border-emerald-100 bg-emerald-50 px-6 py-3 text-sm font-semibold text-emerald-800 dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-300"
               style={{ animation: "success-toast-in 0.4s ease-out both" }}
             >
               <span
@@ -1232,40 +1307,43 @@ export default function Home() {
               Success! Your reading is saved securely.
             </div>
             <div className="space-y-4 p-6 pt-4">
-              <div className="rounded-2xl bg-slate-50 p-4">
-                <p className="text-sm text-slate-600">
+              <div className="rounded-2xl bg-slate-50 p-4 dark:bg-zinc-800/80">
+                <p className="text-sm text-slate-600 dark:text-zinc-300">
                   Reading:{" "}
-                  <span className="font-semibold text-slate-900">
+                  <span className="font-semibold text-slate-900 dark:text-zinc-50">
                     {latestSubmitted.systolic}/{latestSubmitted.diastolic} mmHg
                   </span>
                 </p>
-                <p className="mt-1 text-sm text-slate-600">
-                  Age: <span className="font-semibold text-slate-900">{latestSubmitted.age}</span>
+                <p className="mt-1 text-sm text-slate-600 dark:text-zinc-300">
+                  Age: <span className="font-semibold text-slate-900 dark:text-zinc-50">{latestSubmitted.age}</span>
                 </p>
               </div>
 
-              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100">
-                <p className="text-sm font-semibold text-blue-700">Clinical guidance</p>
-                <ul className="mt-2 space-y-1 text-sm text-slate-700">
+              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100 dark:bg-blue-950/30 dark:ring-blue-900/50">
+                <p className="text-sm font-semibold text-blue-700 dark:text-blue-300">Clinical guidance</p>
+                <ul className="mt-2 space-y-1 text-sm text-slate-700 dark:text-zinc-300">
                   {clinicalAdvice[latestSubmitted.category].map((item) => (
                     <li key={item}>- {item}</li>
                   ))}
                 </ul>
               </div>
 
-              <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Lifestyle plan</p>
-                <ul className="mt-2 space-y-1 text-sm text-slate-700">
+              <div className="rounded-2xl bg-white p-4 ring-1 ring-slate-200 dark:bg-zinc-800/60 dark:ring-zinc-700">
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400">
+                  Lifestyle plan
+                </p>
+                <ul className="mt-2 space-y-1 text-sm text-slate-700 dark:text-zinc-300">
                   {structuredTips.slice(0, 4).map((tip) => (
                     <li key={tip.title}>
-                      <span className="font-semibold text-slate-800">{tip.title}:</span> {tip.points[0]}
+                      <span className="font-semibold text-slate-800 dark:text-zinc-100">{tip.title}:</span>{" "}
+                      {tip.points[0]}
                     </li>
                   ))}
                 </ul>
               </div>
 
-              <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-sm font-medium text-emerald-700">Reading saved to Supabase</p>
+              <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/40 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-sm font-medium text-emerald-700 dark:text-emerald-300">Reading saved to Supabase</p>
                 <button
                   type="button"
                   onClick={downloadPdfReport}
@@ -1282,7 +1360,7 @@ export default function Home() {
                 <button
                   type="button"
                   onClick={() => setShowResultModal(false)}
-                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200"
+                  className="rounded-xl bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
                 >
                   Close
                 </button>
