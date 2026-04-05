@@ -13,6 +13,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { Eye, EyeOff } from "lucide-react";
 import { supabase } from "@/lib/supabaseClient";
 
 type Profile = {
@@ -239,6 +240,7 @@ export default function Home() {
   const [authLoading, setAuthLoading] = useState(true);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authMessage, setAuthMessage] = useState("");
+  const [showLoginPassword, setShowLoginPassword] = useState(false);
   const [showResultModal, setShowResultModal] = useState(false);
   const [showAddReadingModal, setShowAddReadingModal] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -841,42 +843,55 @@ export default function Home() {
 
   if (!session?.user) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/80 p-6">
-        <div className={`w-full max-w-md ${shellCardClass} p-7 sm:p-8`}>
-          <div className="mb-5 flex items-center gap-3">
+      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-slate-50 via-white to-blue-50/80 px-4 py-6 sm:px-6">
+        <div className={`mx-auto w-[90%] max-w-md ${shellCardClass} p-6 sm:p-8`}>
+          <div className="mb-6 flex flex-col items-center text-center">
             <div className="flex h-11 w-11 items-center justify-center rounded-[12px] bg-[#2563eb] text-white shadow-md">
               <svg viewBox="0 0 24 24" fill="currentColor" className="h-5 w-5" aria-hidden="true">
                 <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5A4.5 4.5 0 0 1 6.5 4c1.74 0 3.41.81 4.5 2.09A6 6 0 0 1 12 7.15a6 6 0 0 1 1-1.06A5.93 5.93 0 0 1 17.5 4 4.5 4.5 0 0 1 22 8.5c0 3.78-3.4 6.86-8.55 11.54z" />
               </svg>
             </div>
-            <div>
-              <p className="text-sm font-medium text-[#2563eb]">Hypertension Buddy</p>
-              <h1 className="text-xl font-semibold text-slate-900">Professional Login</h1>
-            </div>
+            <p className="mt-3 text-sm font-medium text-[#2563eb]">Hypertension Buddy</p>
+            <h1 className="mt-1 text-xl font-semibold text-slate-900">Professional Login</h1>
           </div>
-          <form onSubmit={(event) => void handleLogin(event)} className="space-y-3">
+          <form
+            onSubmit={(event) => void handleLogin(event)}
+            className="mx-auto flex w-full max-w-full flex-col items-stretch space-y-3"
+          >
             <input
               type="email"
+              autoComplete="email"
               value={loginEmail}
               onChange={(event) => setLoginEmail(event.target.value)}
               placeholder="Email"
-              className="w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+              className="w-full rounded-[12px] border border-slate-200 bg-white px-4 py-3 text-sm text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
               required
             />
-            <input
-              type="password"
-              value={loginPassword}
-              onChange={(event) => setLoginPassword(event.target.value)}
-              placeholder="Password"
-              className="w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
-              required
-            />
-            <button type="submit" className={`${primaryBtnClass} w-full`}>
+            <div className="relative">
+              <input
+                type={showLoginPassword ? "text" : "password"}
+                autoComplete="current-password"
+                value={loginPassword}
+                onChange={(event) => setLoginPassword(event.target.value)}
+                placeholder="Password"
+                className="w-full rounded-[12px] border border-slate-200 bg-white py-3 pl-4 pr-12 text-sm text-gray-900 placeholder:text-gray-500 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
+                required
+              />
+              <button
+                type="button"
+                onClick={() => setShowLoginPassword((v) => !v)}
+                className="absolute right-2 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center rounded-lg text-gray-600 transition hover:bg-slate-100 hover:text-gray-900"
+                aria-label={showLoginPassword ? "Hide password" : "Show password"}
+              >
+                {showLoginPassword ? <EyeOff className="h-5 w-5" strokeWidth={2} /> : <Eye className="h-5 w-5" strokeWidth={2} />}
+              </button>
+            </div>
+            <button type="submit" className={`${primaryBtnClass} mx-auto w-full max-w-full`}>
               {authMode === "login" ? "Login" : "Create account"}
             </button>
             <button
               type="button"
-              className="w-full rounded-[12px] bg-slate-100 px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
+              className="mx-auto w-full max-w-full rounded-[12px] bg-slate-100 px-4 py-3 text-center text-sm font-semibold text-slate-700 transition hover:bg-slate-200"
               onClick={() => {
                 setAuthMode((prev) => (prev === "login" ? "signup" : "login"));
                 setAuthMessage("");
@@ -884,7 +899,9 @@ export default function Home() {
             >
               {authMode === "login" ? "Need an account? Sign up" : "Already have an account? Login"}
             </button>
-            {authMessage ? <p className="text-sm text-blue-700">{authMessage}</p> : null}
+            {authMessage ? (
+              <p className="text-center text-sm text-blue-700">{authMessage}</p>
+            ) : null}
           </form>
         </div>
       </div>
@@ -1021,15 +1038,15 @@ export default function Home() {
       </div>
 
       {showAddReadingModal ? (
-        <div className="fixed inset-0 z-[60] flex items-end justify-center bg-slate-900/50 p-0 sm:items-center sm:p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center overflow-y-auto bg-slate-900/50 px-4 py-6">
           <div
-            className="relative w-full max-w-md rounded-t-[16px] bg-white shadow-2xl sm:rounded-[12px]"
+            className="relative mx-auto w-[90%] max-w-[400px] rounded-[12px] bg-white shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="add-reading-title"
           >
-            <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 pb-4 pt-6 sm:px-8">
-              <h2 id="add-reading-title" className="text-lg font-semibold text-slate-900">
+            <div className="flex items-start justify-between gap-4 border-b border-slate-100 p-6">
+              <h2 id="add-reading-title" className="pr-2 text-lg font-semibold text-slate-900">
                 Enter Blood Pressure Reading
               </h2>
               <button
@@ -1043,10 +1060,7 @@ export default function Home() {
                 </svg>
               </button>
             </div>
-            <form
-              className="space-y-4 px-6 py-6 sm:px-8"
-              onSubmit={(event) => void addReading(event)}
-            >
+            <form className="space-y-4 p-6" onSubmit={(event) => void addReading(event)}>
               <div>
                 <label className="block text-xs font-medium uppercase tracking-wide text-slate-500">Age</label>
                 <input
@@ -1066,7 +1080,7 @@ export default function Home() {
                   onChange={(event) => setSystolic(event.target.value)}
                   type="number"
                   min={70}
-                  placeholder="180"
+                  placeholder="120"
                   className="mt-1.5 w-full rounded-[12px] border border-slate-200 px-4 py-3 text-sm text-slate-900 outline-none transition focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20"
                   required
                 />
@@ -1093,16 +1107,16 @@ export default function Home() {
       ) : null}
 
       {showResultModal && latestSubmitted ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 p-4">
+        <div className="fixed inset-0 z-[65] flex items-center justify-center overflow-y-auto bg-slate-900/45 px-4 py-6">
           <div
-            className={`w-full max-w-lg overflow-hidden rounded-3xl bg-white shadow-2xl ring-2 ring-offset-2 ${categoryStyles[latestSubmitted.category].ring}`}
+            className={`mx-auto w-[90%] max-w-[400px] max-h-[min(85vh,640px)] overflow-y-auto rounded-[12px] bg-white shadow-2xl ring-2 ring-offset-2 ${categoryStyles[latestSubmitted.category].ring}`}
           >
-            <div className={`px-6 py-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}>
+            <div className={`p-6 pb-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}>
               <p className="text-xs uppercase tracking-wide text-white/90">Hypertension Buddy · Classification</p>
-              <h3 className="text-2xl font-semibold">{latestSubmitted.category}</h3>
+              <h3 className="mt-1 text-xl font-semibold sm:text-2xl">{latestSubmitted.category}</h3>
               <p className="mt-1 text-sm text-white/90">{categoryStyles[latestSubmitted.category].note}</p>
             </div>
-            <div className="space-y-4 p-6">
+            <div className="space-y-4 p-6 pt-4">
               <div className="rounded-2xl bg-slate-50 p-4">
                 <p className="text-sm text-slate-600">
                   Reading:{" "}
@@ -1135,12 +1149,12 @@ export default function Home() {
                 </ul>
               </div>
 
-              <div className="flex items-center justify-between gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+              <div className="flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-sm font-medium text-emerald-700">Reading saved to Supabase</p>
                 <button
                   type="button"
                   onClick={downloadPdfReport}
-                  className="inline-flex items-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+                  className="inline-flex w-full shrink-0 items-center justify-center gap-1 rounded-lg bg-blue-600 px-3 py-2 text-xs font-semibold text-white hover:bg-blue-700 sm:w-auto"
                 >
                   <svg viewBox="0 0 24 24" fill="currentColor" className="h-4 w-4">
                     <path d="M12 16l4-5h-3V4h-2v7H8l4 5zm-7 2h14v2H5v-2z" />
