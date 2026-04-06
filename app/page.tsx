@@ -1605,42 +1605,45 @@ export default function Home() {
       {showResultModal && latestSubmitted ? (
         <div className='fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/45 px-4 py-6 backdrop-blur-sm dark:bg-black/55'>
           <div
-            className={`mx-auto w-full max-w-[700px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-2 ring-offset-2 ring-offset-white dark:bg-zinc-900 dark:ring-offset-zinc-950 ${categoryStyles[latestSubmitted.category].ring}`}
+            className={`mx-auto max-h-[90vh] w-[95%] max-w-md overflow-y-auto rounded-3xl bg-white shadow-2xl ring-2 ring-offset-2 ring-offset-white dark:bg-zinc-900 dark:ring-offset-zinc-950 md:max-w-[700px] ${categoryStyles[latestSubmitted.category].ring}`}
           >
             <div
-              className={`px-5 py-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}
+              className={`px-4 py-3 text-white sm:px-5 sm:py-4 ${modalHeaderClass[latestSubmitted.category]}`}
             >
-              <div className='flex items-center justify-between'>
-                <div>
-                  <p className='text-[10px] font-bold uppercase tracking-[0.2em] text-white/80'>
+              <div className='flex items-center justify-between gap-2'>
+                <div className='min-w-0'>
+                  <p className='truncate text-[9px] font-bold uppercase tracking-[0.2em] text-white/80 sm:text-[10px]'>
                     BP Classification
                   </p>
-                  <h3 className='text-2xl font-black tracking-tight'>
+                  <h3 className='truncate text-lg font-black tracking-tight sm:text-2xl'>
                     {latestSubmitted.category}
                   </h3>
                 </div>
-                <div className='text-right'>
-                  <p className='text-[10px] font-bold uppercase tracking-widest text-white/80'>
+                <div className='shrink-0 text-right'>
+                  <p className='text-[9px] font-bold uppercase tracking-widest text-white/80 sm:text-[10px]'>
                     Reading
                   </p>
-                  <p className='text-xl font-black'>
-                    {latestSubmitted.systolic}/{latestSubmitted.diastolic} <span className='text-xs font-normal opacity-80'>mmHg</span>
+                  <p className='text-base font-black sm:text-xl'>
+                    {latestSubmitted.systolic}/{latestSubmitted.diastolic}{" "}
+                    <span className='text-[10px] font-normal opacity-80 sm:text-xs'>
+                      mmHg
+                    </span>
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className='p-5'>
-              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+            <div className='p-4 sm:p-5'>
+              <div className='grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4'>
                 {/* Clinical Guidance Column */}
-                <div className='rounded-2xl bg-blue-50/50 p-4 ring-1 ring-blue-100 dark:bg-blue-950/20 dark:ring-blue-900/40'>
-                  <div className='mb-3 flex items-center gap-2'>
-                    <Shield className='h-4 w-4 text-blue-600 dark:text-blue-400' />
-                    <p className='text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300'>
+                <div className='rounded-2xl bg-blue-50/50 p-3 ring-1 ring-blue-100 dark:bg-blue-950/20 dark:ring-blue-900/40 sm:p-4'>
+                  <div className='mb-2 flex items-center gap-2 sm:mb-3'>
+                    <Shield className='h-3.5 w-3.5 text-blue-600 dark:text-blue-400 sm:h-4 sm:w-4' />
+                    <p className='text-[10px] font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300 sm:text-xs'>
                       Clinical Guidance
                     </p>
                   </div>
-                  <ul className='space-y-2 text-sm leading-relaxed text-slate-700 dark:text-zinc-300'>
+                  <ul className='space-y-1.5 text-xs leading-relaxed text-slate-700 dark:text-zinc-300 sm:space-y-2 sm:text-sm'>
                     {clinicalAdvice[latestSubmitted.category].map((item) => (
                       <li key={item} className='flex items-start gap-2'>
                         <span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400 opacity-60' />
@@ -1651,14 +1654,14 @@ export default function Home() {
                 </div>
 
                 {/* Lifestyle Plan Column */}
-                <div className='rounded-2xl bg-emerald-50/30 p-4 ring-1 ring-emerald-100 dark:bg-emerald-950/10 dark:ring-emerald-900/30'>
-                  <div className='mb-3 flex items-center gap-2'>
-                    <Apple className='h-4 w-4 text-emerald-600 dark:text-emerald-400' />
-                    <p className='text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300'>
+                <div className='rounded-2xl bg-emerald-50/30 p-3 ring-1 ring-emerald-100 dark:bg-emerald-950/10 dark:ring-emerald-900/30 sm:p-4'>
+                  <div className='mb-2 flex items-center gap-2 sm:mb-3'>
+                    <Apple className='h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 sm:h-4 sm:w-4' />
+                    <p className='text-[10px] font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300 sm:text-xs'>
                       Lifestyle Plan
                     </p>
                   </div>
-                  <ul className='space-y-2 text-sm leading-relaxed text-slate-700 dark:text-zinc-300'>
+                  <ul className='space-y-1.5 text-xs leading-relaxed text-slate-700 dark:text-zinc-300 sm:space-y-2 sm:text-sm'>
                     {structuredTips.slice(0, 4).map((tip) => (
                       <li key={tip.title} className='flex items-start gap-2'>
                         <span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 opacity-60' />
@@ -1675,33 +1678,37 @@ export default function Home() {
               </div>
 
               {/* Action Buttons Row */}
-              <div className='mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-5 dark:border-zinc-800'>
+              <div className='mt-4 flex flex-wrap items-center justify-center gap-2 border-t border-slate-100 pt-4 dark:border-zinc-800 sm:mt-6 sm:gap-3 sm:pt-5'>
                 <button
                   type='button'
                   onClick={downloadPdfReport}
-                  className='inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 hover:-translate-y-0.5 active:scale-95'
+                  className='inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 hover:-translate-y-0.5 active:scale-95 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs'
                 >
-                  <svg viewBox='0 0 24 24' fill='currentColor' className='h-4 w-4'>
+                  <svg
+                    viewBox='0 0 24 24'
+                    fill='currentColor'
+                    className='h-3.5 w-3.5 sm:h-4 sm:w-4'
+                  >
                     <path d='M12 16l4-5h-3V4h-2v7H8l4 5zm-7 2h14v2H5v-2z' />
                   </svg>
                   PDF Download
                 </button>
-                
-                <div className='flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 ring-1 ring-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700'>
-                  <Shield className='h-3.5 w-3.5' />
-                  Clinical Guidelines
+
+                <div className='flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-slate-500 ring-1 ring-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-[10px]'>
+                  <Shield className='h-3 w-3 sm:h-3.5 sm:w-3.5' />
+                  Guidelines
                 </div>
 
-                <div className='flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 ring-1 ring-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700'>
-                  <Apple className='h-3.5 w-3.5' />
-                  DASH Diet
+                <div className='flex items-center gap-1.5 rounded-xl bg-slate-50 px-3 py-2 text-[9px] font-bold uppercase tracking-widest text-slate-500 ring-1 ring-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-[10px]'>
+                  <Apple className='h-3 w-3 sm:h-3.5 sm:w-3.5' />
+                  DASH
                 </div>
               </div>
 
               <button
                 type='button'
                 onClick={() => setShowResultModal(false)}
-                className='mt-4 w-full rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-200 active:scale-[0.98] dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+                className='mt-4 w-full rounded-xl bg-slate-100 py-2.5 text-xs font-bold text-slate-700 transition-all hover:bg-slate-200 active:scale-[0.98] dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700 sm:py-3 sm:text-sm'
               >
                 Close
               </button>
