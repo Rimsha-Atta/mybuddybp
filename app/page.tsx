@@ -1603,122 +1603,108 @@ export default function Home() {
       ) : null}
 
       {showResultModal && latestSubmitted ? (
-        <div className='fixed inset-0 z-[65] flex items-center justify-center overflow-y-auto bg-slate-900/45 px-4 py-6 dark:bg-black/55'>
+        <div className='fixed inset-0 z-[65] flex items-center justify-center bg-slate-900/45 px-4 py-6 backdrop-blur-sm dark:bg-black/55'>
           <div
-            className={`mx-auto w-[90%] max-w-[400px] max-h-[min(85vh,640px)] overflow-y-auto rounded-[12px] bg-white shadow-2xl ring-2 ring-offset-2 ring-offset-white dark:bg-zinc-900 dark:ring-offset-zinc-950 ${categoryStyles[latestSubmitted.category].ring}`}
+            className={`mx-auto w-full max-w-[700px] overflow-hidden rounded-3xl bg-white shadow-2xl ring-2 ring-offset-2 ring-offset-white dark:bg-zinc-900 dark:ring-offset-zinc-950 ${categoryStyles[latestSubmitted.category].ring}`}
           >
             <div
-              className={`p-6 pb-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}
+              className={`px-5 py-4 text-white ${modalHeaderClass[latestSubmitted.category]}`}
             >
-              <p className='text-xs uppercase tracking-wide text-white/90'>
-                Hypertension Buddy · Classification
-              </p>
-              <h3 className='mt-1 text-xl font-semibold sm:text-2xl'>
-                {latestSubmitted.category}
-              </h3>
-              <p className='mt-1 text-sm text-white/90'>
-                {categoryStyles[latestSubmitted.category].note}
-              </p>
+              <div className='flex items-center justify-between'>
+                <div>
+                  <p className='text-[10px] font-bold uppercase tracking-[0.2em] text-white/80'>
+                    BP Classification
+                  </p>
+                  <h3 className='text-2xl font-black tracking-tight'>
+                    {latestSubmitted.category}
+                  </h3>
+                </div>
+                <div className='text-right'>
+                  <p className='text-[10px] font-bold uppercase tracking-widest text-white/80'>
+                    Reading
+                  </p>
+                  <p className='text-xl font-black'>
+                    {latestSubmitted.systolic}/{latestSubmitted.diastolic} <span className='text-xs font-normal opacity-80'>mmHg</span>
+                  </p>
+                </div>
+              </div>
             </div>
-            <div
-              className='flex items-center gap-3 border-b border-emerald-100 bg-emerald-50/80 px-6 py-4 text-sm font-semibold text-emerald-800 backdrop-blur-sm dark:border-emerald-900/40 dark:bg-emerald-950/50 dark:text-emerald-300'
-              style={{ animation: "success-toast-in 0.4s ease-out both" }}
-            >
-              <span
-                className='flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm'
-                style={{ animation: "success-check-pop 0.5s ease-out both" }}
-                aria-hidden
-              >
-                <svg
-                  className='h-4 w-4'
-                  fill='none'
-                  stroke='currentColor'
-                  strokeWidth={3}
-                  viewBox='0 0 24 24'
-                >
-                  <path
-                    strokeLinecap='round'
-                    strokeLinejoin='round'
-                    d='M5 13l4 4L19 7'
-                  />
-                </svg>
-              </span>
-              <span className='leading-tight'>
-                Success! Your reading is saved securely.
-              </span>
-            </div>
-            <div className='space-y-4 p-6 pt-4'>
-              <div className='rounded-2xl bg-slate-50 p-4 dark:bg-zinc-800/80'>
-                <p className='text-sm text-slate-600 dark:text-zinc-300'>
-                  Reading:{" "}
-                  <span className='font-semibold text-slate-900 dark:text-zinc-50'>
-                    {latestSubmitted.systolic}/{latestSubmitted.diastolic} mmHg
-                  </span>
-                </p>
-                <p className='mt-1 text-sm text-slate-600 dark:text-zinc-300'>
-                  Age:{" "}
-                  <span className='font-semibold text-slate-900 dark:text-zinc-50'>
-                    {latestSubmitted.age}
-                  </span>
-                </p>
+
+            <div className='p-5'>
+              <div className='grid grid-cols-1 gap-4 md:grid-cols-2'>
+                {/* Clinical Guidance Column */}
+                <div className='rounded-2xl bg-blue-50/50 p-4 ring-1 ring-blue-100 dark:bg-blue-950/20 dark:ring-blue-900/40'>
+                  <div className='mb-3 flex items-center gap-2'>
+                    <Shield className='h-4 w-4 text-blue-600 dark:text-blue-400' />
+                    <p className='text-xs font-bold uppercase tracking-widest text-blue-700 dark:text-blue-300'>
+                      Clinical Guidance
+                    </p>
+                  </div>
+                  <ul className='space-y-2 text-sm leading-relaxed text-slate-700 dark:text-zinc-300'>
+                    {clinicalAdvice[latestSubmitted.category].map((item) => (
+                      <li key={item} className='flex items-start gap-2'>
+                        <span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400 opacity-60' />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Lifestyle Plan Column */}
+                <div className='rounded-2xl bg-emerald-50/30 p-4 ring-1 ring-emerald-100 dark:bg-emerald-950/10 dark:ring-emerald-900/30'>
+                  <div className='mb-3 flex items-center gap-2'>
+                    <Apple className='h-4 w-4 text-emerald-600 dark:text-emerald-400' />
+                    <p className='text-xs font-bold uppercase tracking-widest text-emerald-700 dark:text-emerald-300'>
+                      Lifestyle Plan
+                    </p>
+                  </div>
+                  <ul className='space-y-2 text-sm leading-relaxed text-slate-700 dark:text-zinc-300'>
+                    {structuredTips.slice(0, 4).map((tip) => (
+                      <li key={tip.title} className='flex items-start gap-2'>
+                        <span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-400 opacity-60' />
+                        <span>
+                          <span className='font-bold text-slate-900 dark:text-zinc-100'>
+                            {tip.title}:
+                          </span>{" "}
+                          {tip.points[0]}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
               </div>
 
-              <div className='rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100 dark:bg-blue-950/30 dark:ring-blue-900/50'>
-                <p className='text-sm font-semibold text-blue-700 dark:text-blue-300'>
-                  Clinical guidance
-                </p>
-                <ul className='mt-2 space-y-1 text-sm text-slate-700 dark:text-zinc-300'>
-                  {clinicalAdvice[latestSubmitted.category].map((item) => (
-                    <li key={item}>- {item}</li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className='rounded-2xl bg-white p-4 ring-1 ring-slate-200 dark:bg-zinc-800/60 dark:ring-zinc-700'>
-                <p className='text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400'>
-                  Lifestyle plan
-                </p>
-                <ul className='mt-2 space-y-1 text-sm text-slate-700 dark:text-zinc-300'>
-                  {structuredTips.slice(0, 4).map((tip) => (
-                    <li key={tip.title}>
-                      <span className='font-semibold text-slate-800 dark:text-zinc-100'>
-                        {tip.title}:
-                      </span>{" "}
-                      {tip.points[0]}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-
-              <div className='flex flex-col gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-900/50 dark:bg-emerald-950/40 sm:flex-row sm:items-center sm:justify-between'>
-                <p className='text-sm font-medium text-emerald-700 dark:text-emerald-300'>
-                  Reading saved to Supabase
-                </p>
+              {/* Action Buttons Row */}
+              <div className='mt-6 flex flex-wrap items-center justify-center gap-3 border-t border-slate-100 pt-5 dark:border-zinc-800'>
                 <button
                   type='button'
                   onClick={downloadPdfReport}
-                  className='inline-flex w-full shrink-0 items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-semibold text-white shadow-sm transition-all duration-200 hover:bg-blue-700 hover:shadow-md hover:-translate-y-0.5 active:scale-95 sm:w-auto'
+                  className='inline-flex items-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 hover:-translate-y-0.5 active:scale-95'
                 >
-                  <svg
-                    viewBox='0 0 24 24'
-                    fill='currentColor'
-                    className='h-4 w-4'
-                  >
+                  <svg viewBox='0 0 24 24' fill='currentColor' className='h-4 w-4'>
                     <path d='M12 16l4-5h-3V4h-2v7H8l4 5zm-7 2h14v2H5v-2z' />
                   </svg>
                   PDF Download
                 </button>
+                
+                <div className='flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 ring-1 ring-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700'>
+                  <Shield className='h-3.5 w-3.5' />
+                  Clinical Guidelines
+                </div>
+
+                <div className='flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2.5 text-[10px] font-bold uppercase tracking-widest text-slate-500 ring-1 ring-slate-200 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-700'>
+                  <Apple className='h-3.5 w-3.5' />
+                  DASH Diet
+                </div>
               </div>
 
-              <div className='flex justify-end'>
-                <button
-                  type='button'
-                  onClick={() => setShowResultModal(false)}
-                  className='rounded-xl bg-slate-100 px-5 py-2.5 text-sm font-semibold text-slate-700 shadow-sm transition-all duration-200 hover:bg-slate-200 hover:shadow-md hover:-translate-y-0.5 active:scale-95 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700'
-                >
-                  Close
-                </button>
-              </div>
+              <button
+                type='button'
+                onClick={() => setShowResultModal(false)}
+                className='mt-4 w-full rounded-xl bg-slate-100 py-3 text-sm font-bold text-slate-700 transition-all hover:bg-slate-200 active:scale-[0.98] dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700'
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

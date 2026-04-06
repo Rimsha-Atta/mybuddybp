@@ -1,36 +1,94 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hypertension Buddy 🩺
 
-## Getting Started
+**Hypertension Buddy** is a comprehensive, professional-grade blood pressure tracking and management application. It empowers users to monitor their cardiovascular health with ease, providing instant AHA/ACC-style classifications, trend analysis, and personalized health guidance.
 
-First, run the development server:
+![Dashboard Showcase](./screenshots/dashboard.png)
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## 🏗️ Project Architecture
+
+The application is built using a modern **Full-Stack** architecture, ensuring speed, security, and scalability.
+
+- **Frontend (Next.js 15):** A high-performance React framework utilizing the **App Router** for efficient navigation and server-side optimization. It handles the UI, state management, and client-side logic for BP classification and PDF report generation.
+- **Styling (Tailwind CSS):** Provides a fully responsive, utility-first design with a focus on premium aesthetics, including a "Card-based" UI and smooth interactivity.
+- **Backend (Supabase):**
+  - **Auth:** Secure user authentication (Email/Password).
+  - **Database:** A robust PostgreSQL database for storing user profiles and health readings.
+  - **RLS (Row Level Security):** Ensures that each user can only access and modify their own medical data.
+- **Icons & Visuals:** Powered by **Lucide React** for professional iconography and **Recharts** for interactive health trend visualizations.
+
+### Folder Structure
+
+```text
+├── app/                  # Next.js App Router (Pages, Layout, Styles)
+├── lib/                  # Shared utilities (Supabase Client)
+├── public/               # Static assets (Images, Icons)
+├── supabase/             # Database schemas and SQL migration files
+├── README.md             # Project documentation
+└── package.json          # Dependencies and scripts
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📊 Database Schema
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+The core of the data layer is the `readings` table in Supabase, structured as follows:
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Column | Type | Description |
+| :--- | :--- | :--- |
+| `id` | UUID (PK) | Unique identifier for each reading |
+| `user_id` | UUID (FK) | Reference to the authenticated user (`auth.users`) |
+| `systolic` | Integer | Systolic pressure measurement (mmHg) |
+| `diastolic` | Integer | Diastolic pressure measurement (mmHg) |
+| `pulse` | Integer | Heart rate / Pulse (Mapped as 'Age' in frontend context) |
+| `created_at` | Timestamptz | Timestamp of when the measurement was recorded |
 
-## Learn More
+## 🖥️ UI Showcase
 
-To learn more about Next.js, take a look at the following resources:
+### Dashboard
+The main command center for health tracking.
+![Dashboard Screenshot](./screenshots/dashboard.png)
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Profile Management
+Professional card-based layout for personal and account details.
+![Profile Screenshot](./screenshots/profile.png)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Reading History
+Detailed history log with instant classification badges.
+![History Screenshot](./screenshots/history.png)
 
-## Deploy on Vercel
+## 🧠 Key Features & Logic
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Blood Pressure Classification
+The application automatically categorizes readings based on **ACC/AHA** clinical guidelines:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+| Category | Systolic (mmHg) | | Diastolic (mmHg) |
+| :--- | :--- | :--- | :--- |
+| **Normal** | < 120 | AND | < 80 |
+| **Elevated** | 120 – 129 | AND | < 80 |
+| **Stage 1** | 130 – 139 | OR | 80 – 89 |
+| **Stage 2** | ≥ 140 | OR | ≥ 90 |
+| **Crisis** | ≥ 180 | OR | ≥ 120 |
+
+### Core Functionality
+- **Instant Classification:** Real-time feedback and clinical advice for every reading.
+- **Trend Visualizations:** Interactive charts showing systolic and diastolic progress over time.
+- **PDF Reports:** Generate and download professional medical reports for sharing with physicians.
+- **Responsive Design:** A premium experience across mobile, tablet, and desktop.
+- **Dark Mode:** Full support for system-wide dark and light themes.
+
+## 🛠️ Tech Stack
+
+- **Framework:** [Next.js](https://nextjs.org/)
+- **Language:** [TypeScript](https://www.typescriptlang.org/)
+- **Database/Auth:** [Supabase](https://supabase.com/)
+- **Charts:** [Recharts](https://recharts.org/)
+- **PDF:** [jsPDF](https://github.com/parallax/jsPDF)
+- **Icons:** [Lucide React](https://lucide.dev/)
+
+## 🚀 Future Roadmap
+
+- [ ] **Bilingual Support:** Multi-language interface starting with Arabic and English.
+- [ ] **PWA (Progressive Web App):** Installable on mobile devices for offline access and native-like performance.
+- [ ] **Medication Reminders:** Automated notifications for daily medication adherence.
+- [ ] **AI Insights:** Predictive analysis of health trends using machine learning.
+
+---
+Developed with care for a healthier heart. ❤️
