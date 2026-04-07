@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { jsPDF } from "jspdf";
 import type { Session } from "@supabase/supabase-js";
+import { useTheme } from "next-themes";
 import {
   CartesianGrid,
   Legend,
@@ -19,7 +20,6 @@ import {
   Ban,
   Brain,
   Calendar,
-  Cigarette,
   CigaretteOff,
   Clock,
   Eye,
@@ -47,7 +47,7 @@ type Reading = {
   id: string;
   systolic: number;
   diastolic: number;
-  /** Stored in Supabase `readings.pulse` column (schema unchanged). */
+  /** Stored in Supabase `readings.age` column. */
   age: number;
   category: BpCategory;
   createdAt: string;
@@ -319,23 +319,19 @@ export default function Home() {
   const [bpFormWarning, setBpFormWarning] = useState("");
   const [fetchError, setFetchError] = useState("");
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
-  const [darkMode, setDarkMode] = useState(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const stored = localStorage.getItem(THEME_STORAGE_KEY);
-        if (stored === "dark") return true;
-        if (stored === "light") return false;
-      } catch {
-        /* ignore */
-      }
-    }
-    return false;
-  });
+  const { theme, setTheme, resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const darkMode = resolvedTheme === "dark";
 
   const fetchReadings = async (userId: string) => {
     const { data, error } = await supabase
       .from("readings")
-      .select("id, systolic, diastolic, pulse, created_at")
+      .select("id, systolic, diastolic, age, created_at")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
@@ -350,7 +346,7 @@ export default function Home() {
         id: row.id,
         systolic: row.systolic,
         diastolic: row.diastolic,
-        age: row.pulse,
+        age: row.age,
         category: categorizeReading(row.systolic, row.diastolic),
         createdAt: row.created_at,
       })),
@@ -392,15 +388,6 @@ export default function Home() {
     const t = window.setTimeout(() => setSaveSuccessToast(false), 3200);
     return () => window.clearTimeout(t);
   }, [saveSuccessToast]);
-
-  useEffect(() => {
-    document.documentElement.classList.toggle("dark", darkMode);
-    try {
-      localStorage.setItem(THEME_STORAGE_KEY, darkMode ? "dark" : "light");
-    } catch {
-      /* ignore */
-    }
-  }, [darkMode]);
 
   const latestReading = readings[0];
   const latestCategory = latestReading?.category ?? "Normal";
@@ -611,9 +598,9 @@ export default function Home() {
         user_id: session.user.id,
         systolic: sys,
         diastolic: dia,
-        pulse: age,
+        age: age,
       })
-      .select("id, systolic, diastolic, pulse, created_at")
+      .select("id, systolic, diastolic, age, created_at")
       .single();
 
     if (error || !data) {
@@ -625,7 +612,7 @@ export default function Home() {
       id: data.id,
       systolic: data.systolic,
       diastolic: data.diastolic,
-      age: data.pulse,
+      age: data.age,
       category: categorizeReading(data.systolic, data.diastolic),
       createdAt: data.created_at,
     };
@@ -1131,10 +1118,10 @@ export default function Home() {
   if (authLoading)
     return <div className='min-h-screen bg-slate-50 dark:bg-zinc-950' />;
 
-  const themeToggle = (
+  const themeToggle = mounted ? (
     <button
       type='button'
-      onClick={() => setDarkMode((d) => !d)}
+      onClick={() => setTheme(darkMode ? "light" : "dark")}
       className='flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700'
       aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
     >
@@ -1144,6 +1131,8 @@ export default function Home() {
         <Moon className='h-5 w-5' strokeWidth={2} />
       )}
     </button>
+  ) : (
+    <div className='h-11 w-11 shrink-0' />
   );
 
   if (!session?.user) {

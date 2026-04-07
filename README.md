@@ -37,7 +37,7 @@ The core of the data layer is the `readings` table in Supabase, structured as fo
 | `user_id` | UUID (FK) | Reference to the authenticated user (`auth.users`) |
 | `systolic` | Integer | Systolic pressure measurement (mmHg) |
 | `diastolic` | Integer | Diastolic pressure measurement (mmHg) |
-| `pulse` | Integer | Heart rate / Pulse (Mapped as 'Age' in frontend context) |
+| `age` | Integer | User age (Years) |
 | `created_at` | Timestamptz | Timestamp of when the measurement was recorded |
 
 ## 🖥️ UI Showcase

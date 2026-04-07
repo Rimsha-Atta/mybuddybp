@@ -5,7 +5,7 @@ create table if not exists public.readings (
   user_id uuid not null references auth.users(id) on delete cascade,
   systolic integer not null check (systolic >= 70 and systolic <= 260),
   diastolic integer not null check (diastolic >= 40 and diastolic <= 180),
-  pulse integer not null check (pulse >= 30 and pulse <= 240),
+  age integer not null check (age >= 1 and age <= 120),
   created_at timestamptz not null default now()
 );
 

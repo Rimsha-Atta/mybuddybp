@@ -16,6 +16,11 @@
 body {
   background: var(--background);
   color: var(--foreground);
+  transition: background-color 0.3s ease-in-out, color 0.3s ease-in-out;
+}
+
+.shell-card-class, .data-card-class, .modal-container {
+  transition: background-color 0.3s ease-in-out, border-color 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
 }
 
 html.dark body {
