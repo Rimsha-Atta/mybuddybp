@@ -998,8 +998,6 @@ export default function Home() {
   };
 
   const renderDashboard = () => {
-    const axisColor = darkMode ? "#a1a1aa" : "#64748b";
-    const gridStroke = darkMode ? "#3f3f46" : "#dbeafe";
     return (
       <div className='space-y-10'>
         <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
@@ -1009,7 +1007,7 @@ export default function Home() {
                 key={category}
                 className={`${dataCardClass} ${
                   latestCategory === category
-                    ? `ring-4 ring-blue-500/20 ring-offset-2 ring-offset-[#f8fafc] dark:ring-offset-zinc-950 ${categoryStyles[category].ring}`
+                    ? `ring-4 ring-blue-500/20 ring-offset-2 ring-offset-slate-50 dark:ring-offset-zinc-950 ${categoryStyles[category].ring}`
                     : ""
                 } flex flex-col justify-between transition-all duration-300 hover:-translate-y-1`}
               >
@@ -1073,26 +1071,27 @@ export default function Home() {
           <div className='h-72 w-full min-w-0'>
             <ResponsiveContainer width='100%' height='100%'>
               <LineChart data={chartData}>
-                <CartesianGrid strokeDasharray='3 3' stroke={gridStroke} />
+                <CartesianGrid
+                  strokeDasharray='3 3'
+                  stroke='var(--chart-grid)'
+                />
                 <XAxis
                   dataKey='time'
-                  tick={{ fontSize: 12, fill: axisColor }}
+                  tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
                 />
                 <YAxis
                   domain={[40, 200]}
-                  tick={{ fontSize: 12, fill: axisColor }}
+                  tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
                 />
                 <Tooltip
                   contentStyle={{
-                    backgroundColor: darkMode ? "#27272a" : "#fff",
-                    border: darkMode
-                      ? "1px solid #3f3f46"
-                      : "1px solid #e2e8f0",
+                    backgroundColor: "var(--chart-tooltip-bg)",
+                    border: "1px solid var(--chart-tooltip-border)",
                     borderRadius: 12,
-                    color: darkMode ? "#fafafa" : "#0f172a",
+                    color: "var(--chart-tooltip-text)",
                   }}
                 />
-                <Legend wrapperStyle={{ color: axisColor }} />
+                <Legend wrapperStyle={{ color: "var(--chart-axis)" }} />
                 <Line
                   type='monotone'
                   dataKey='systolic'
@@ -1252,7 +1251,7 @@ export default function Home() {
   }
 
   return (
-    <div className='min-h-screen bg-[#f8fafc] text-slate-800 transition-colors duration-300 dark:bg-zinc-950 dark:text-zinc-100'>
+    <div className='min-h-screen bg-slate-50 text-slate-800 dark:bg-zinc-950 dark:text-zinc-100'>
       <div className='fixed right-4 top-[max(12px,env(safe-area-inset-top,0px))] z-[45] sm:right-5 sm:top-5'>
         {themeToggle}
       </div>
