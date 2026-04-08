@@ -53,9 +53,20 @@ type Reading = {
   createdAt: string;
 };
 
-type Section = "Profile" | "Dashboard" | "History" | "Health Tips";
+type Section =
+  | "Profile"
+  | "Dashboard"
+  | "History"
+  | "Health Tips"
+  | "Medical Standards";
 
-const sections: Section[] = ["Profile", "Dashboard", "History", "Health Tips"];
+const sections: Section[] = [
+  "Profile",
+  "Dashboard",
+  "History",
+  "Health Tips",
+  "Medical Standards",
+];
 
 function categorizeReading(systolic: number, diastolic: number): BpCategory {
   if (systolic >= 180 || diastolic >= 120) return "Crisis";
@@ -410,147 +421,126 @@ export default function Home() {
   const downloadPdfReport = () => {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
-    const margin = 14;
+    const margin = 20;
     const contentW = pageW - margin * 2;
     let y = margin;
 
-    const ensureSpace = (needed: number) => {
-      const pageH = doc.internal.pageSize.getHeight();
-      if (y + needed > pageH - margin) {
-        doc.addPage();
-        y = margin;
-      }
-    };
-
     const sectionTitle = (title: string) => {
-      ensureSpace(14);
-      doc.setFillColor(37, 99, 235);
-      doc.rect(margin, y - 2, contentW, 9, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(11);
+      y += 10;
+      doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text(title, margin + 2, y + 4);
       doc.setTextColor(0, 0, 0);
-      doc.setFont("helvetica", "normal");
-      y += 12;
+      doc.text(title.toUpperCase(), margin, y);
+      y += 2;
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.2);
+      doc.line(margin, y, margin + contentW, y);
+      y += 8;
     };
 
+    // Header Section
     doc.setFont("helvetica", "bold");
-    doc.setFontSize(16);
-    doc.setTextColor(30, 41, 59);
-    doc.text("Hypertension Buddy - Blood Pressure Report", margin, y);
-    y += 8;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(9);
-    doc.setTextColor(100, 116, 139);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, y);
-    y += 10;
+    doc.setFontSize(20);
     doc.setTextColor(0, 0, 0);
+    doc.text("Hypertension Buddy", margin, y);
+    doc.setFontSize(12);
+    doc.setTextColor(100, 100, 100);
+    doc.text("Clinical Report", margin, y + 7);
 
-    sectionTitle("Patient");
+    // Patient Info (Top Right)
     doc.setFontSize(10);
-    doc.text(`Patient Name: ${displayName}`, margin, y);
-    y += 6;
+    doc.setTextColor(0, 0, 0);
+    doc.setFont("helvetica", "bold");
+    const rightAlignX = margin + contentW;
+    doc.text(`Patient: ${displayName}`, rightAlignX, y, { align: "right" });
+    y += 5;
     const ageForReport = latestReading?.age;
     doc.text(
-      `Age (at latest reading): ${ageForReport != null ? String(ageForReport) : "—"}`,
-      margin,
+      `Age: ${ageForReport != null ? ageForReport : "—"}`,
+      rightAlignX,
       y,
+      { align: "right" },
     );
-    y += 6;
-    doc.setFontSize(9);
-    doc.setTextColor(71, 85, 105);
-    doc.text(
-      `Account email (reference): ${session?.user.email ?? "—"}`,
-      margin,
-      y,
-    );
-    doc.setTextColor(0, 0, 0);
-    y += 8;
-
-    sectionTitle("Current summary");
-    doc.setFontSize(10);
-    doc.text(`Classification: ${latestCategory}`, margin, y);
-    y += 6;
-    if (latestReading) {
-      doc.text(
-        `Latest BP: ${latestReading.systolic}/${latestReading.diastolic} mmHg  |  Age recorded: ${latestReading.age}`,
-        margin,
-        y,
-      );
-      y += 6;
-    } else {
-      doc.text("No readings on file.", margin, y);
-      y += 6;
-    }
-
-    sectionTitle("AHA / JNC 8 reference (education)");
-    doc.setFontSize(8);
-    doc.setFont("helvetica", "bold");
-    doc.text("Category", margin, y);
-    doc.text("Systolic", margin + 58, y);
-    doc.text("Diastolic", margin + 110, y);
-    y += 4;
-    doc.setDrawColor(226, 232, 240);
-    doc.line(margin, y, margin + contentW, y);
     y += 5;
     doc.setFont("helvetica", "normal");
-    for (const row of ahaJnc8ReferenceRows) {
-      ensureSpace(8);
-      doc.text(row.category, margin, y);
-      doc.text(row.systolic, margin + 58, y);
-      doc.text(row.diastolic, margin + 110, y);
-      y += 6;
-    }
-    y += 4;
+    doc.setTextColor(120, 120, 120);
+    doc.text(`Date: ${new Date().toLocaleDateString()}`, rightAlignX, y, {
+      align: "right",
+    });
+    y += 15;
 
-    sectionTitle("Recommendations (based on latest classification)");
-    doc.setFontSize(9);
+    // Clinical Status Summary
+    sectionTitle("Clinical Status Summary");
+    doc.setFontSize(11);
+    doc.setFont("helvetica", "bold");
+    doc.setTextColor(0, 0, 0);
+    doc.text("Latest Reading:", margin, y);
+    doc.setFont("helvetica", "normal");
+    if (latestReading) {
+      doc.text(
+        `${latestReading.systolic}/${latestReading.diastolic} mmHg`,
+        margin + 40,
+        y,
+      );
+    } else {
+      doc.text("No readings recorded", margin + 40, y);
+    }
+    y += 7;
+
+    doc.setFont("helvetica", "bold");
+    doc.text("Classification:", margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(latestCategory, margin + 40, y);
+    y += 12;
+
+    // Medical Standards Reference Table
+    sectionTitle("Medical Standards Reference");
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "bold");
+    doc.setFillColor(250, 250, 250);
+    doc.rect(margin, y - 5, contentW, 7, "F");
+    doc.text("Category", margin + 5, y);
+    doc.text("Systolic Range", margin + 65, y);
+    doc.text("Diastolic Range", margin + 125, y);
+    y += 2;
+
+    doc.setFont("helvetica", "normal");
+    doc.setDrawColor(230, 230, 230);
+    for (const row of ahaJnc8ReferenceRows) {
+      y += 8;
+      doc.line(margin, y - 5, margin + contentW, y - 5);
+      doc.text(row.category, margin + 5, y);
+      doc.text(row.systolic, margin + 65, y);
+      doc.text(row.diastolic, margin + 125, y);
+    }
+    doc.line(margin, y + 3, margin + contentW, y + 3);
+    y += 15;
+
+    // Recommendations
+    sectionTitle("Clinical Guidance");
+    doc.setFontSize(10);
     const recLines: string[] = [
       ...clinicalAdvice[latestCategory],
-      "Lifestyle: DASH-style nutrition, limit sodium, 150+ min/week activity, stress care, sleep 7–9h.",
+      "Lifestyle: DASH-style nutrition, limit sodium (<1500mg), 150+ min/week activity.",
     ];
     for (const line of recLines) {
-      const wrapped = doc.splitTextToSize(`• ${line}`, contentW - 4);
+      const wrapped = doc.splitTextToSize(`• ${line}`, contentW - 5);
       for (const wline of wrapped) {
-        ensureSpace(5);
         doc.text(wline, margin + 2, y);
-        y += 5;
+        y += 6;
       }
     }
-    y += 4;
 
-    sectionTitle("Reading history");
+    // Footer
     doc.setFontSize(9);
-    if (readings.length === 0) {
-      doc.text("No readings available.", margin, y);
-      y += 6;
-    } else {
-      doc.setFont("helvetica", "bold");
-      doc.text("Timestamp", margin, y);
-      doc.text("Sys", margin + 78, y);
-      doc.text("Dia", margin + 92, y);
-      doc.text("Age", margin + 106, y);
-      doc.text("Category", margin + 122, y);
-      y += 4;
-      doc.setDrawColor(226, 232, 240);
-      doc.line(margin, y, margin + contentW, y);
-      y += 5;
-      doc.setFont("helvetica", "normal");
-      for (const reading of readings) {
-        const tsLines = doc.splitTextToSize(
-          new Date(reading.createdAt).toLocaleString(),
-          62,
-        );
-        ensureSpace(Math.max(6, tsLines.length * 5 + 2));
-        doc.text(tsLines, margin, y);
-        doc.text(String(reading.systolic), margin + 78, y);
-        doc.text(String(reading.diastolic), margin + 92, y);
-        doc.text(String(reading.age), margin + 106, y);
-        doc.text(reading.category, margin + 122, y);
-        y += Math.max(6, tsLines.length * 5);
-      }
-    }
+    doc.setTextColor(150, 150, 150);
+    const footerY = doc.internal.pageSize.getHeight() - 15;
+    doc.text(
+      "This report is generated based on AHA/ACC 2017 & JNC-8 medical standards.",
+      pageW / 2,
+      footerY,
+      { align: "center" },
+    );
 
     doc.save(
       `hypertension-buddy-report-${new Date().toISOString().slice(0, 10)}.pdf`,
@@ -996,6 +986,73 @@ export default function Home() {
     setSaveError("");
     setBpFormWarning("");
   };
+
+  const renderMedicalStandards = () => (
+    <div className='space-y-10'>
+      <div className='text-center sm:text-left'>
+        <p className='text-xs font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-widest'>
+          Clinical Guidelines based on AHA/ACC 2017 and JNC-8 standards
+        </p>
+      </div>
+
+      <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
+        {(["Normal", "Elevated", "Stage 1", "Stage 2"] as BpCategory[]).map(
+          (category) => (
+            <div
+              key={category}
+              className={`${dataCardClass} flex flex-col justify-between transition-all duration-300 hover:-translate-y-1`}
+            >
+              <div>
+                <div
+                  className={`inline-flex rounded-xl px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${categoryStyles[category].badge}`}
+                >
+                  {category}
+                </div>
+                <p className='mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-zinc-300'>
+                  {categoryStyles[category].note}
+                </p>
+              </div>
+            </div>
+          ),
+        )}
+      </section>
+
+      <section className={`${shellCardClass} p-8 overflow-hidden`}>
+        <h2 className='text-xl font-bold text-slate-900 dark:text-zinc-50 mb-6'>
+          Standard Reference Ranges
+        </h2>
+        <div className='overflow-x-auto rounded-2xl border border-slate-100 dark:border-zinc-800'>
+          <table className='w-full text-left text-sm'>
+            <thead>
+              <tr className='bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-500 dark:bg-zinc-800/50 dark:text-zinc-400'>
+                <th className='px-6 py-4'>Category</th>
+                <th className='px-6 py-4'>Systolic (mmHg)</th>
+                <th className='px-6 py-4'>Diastolic (mmHg)</th>
+              </tr>
+            </thead>
+            <tbody className='divide-y divide-slate-100 dark:divide-zinc-800'>
+              {ahaJnc8ReferenceRows.map((row) => (
+                <tr
+                  key={row.category}
+                  className='hover:bg-slate-50/50 dark:hover:bg-zinc-800/30 transition-colors'
+                >
+                  <td className='px-6 py-4 font-bold text-slate-900 dark:text-zinc-100'>
+                    {row.category}
+                  </td>
+                  <td className='px-6 py-4 text-slate-600 dark:text-zinc-300'>
+                    {row.systolic}
+                  </td>
+                  <td className='px-6 py-4 text-slate-600 dark:text-zinc-300'>
+                    {row.diastolic}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
+  );
 
   const renderDashboard = () => {
     return (
@@ -1454,6 +1511,7 @@ export default function Home() {
           {activeSection === "Profile" && renderProfile()}
           {activeSection === "History" && renderHistoryTable()}
           {activeSection === "Health Tips" && renderHealthTips()}
+          {activeSection === "Medical Standards" && renderMedicalStandards()}
         </main>
       </div>
 
@@ -1692,6 +1750,12 @@ export default function Home() {
                   DASH
                 </div>
               </div>
+
+              <hr className='my-4 border-slate-100 dark:border-zinc-800' />
+              <p className='mb-4 text-center text-[10px] italic text-slate-400 dark:text-zinc-500'>
+                Source: Clinical guidelines based on AHA/ACC 2017 and JNC-8
+                standards
+              </p>
 
               <button
                 type='button'
