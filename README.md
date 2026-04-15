@@ -1,6 +1,6 @@
 # Hypertension Buddy 🩺
 
-**Hypertension Buddy** is a comprehensive, professional-grade blood pressure tracking and management application. It empowers users to monitor their cardiovascular health with ease, providing instant AHA/ACC-style classifications, trend analysis, and personalized health guidance.
+**Hypertension Buddy** is a comprehensive, professional-grade blood pressure tracking and management application. It empowers users to monitor their cardiovascular health with ease, providing layered guideline-based classifications, trend analysis, and personalized health guidance.
 
 ![Dashboard Showcase](./screenshots/dashboard.png)
 
@@ -38,6 +38,7 @@ The core of the data layer is the `readings` table in Supabase, structured as fo
 | `systolic` | Integer | Systolic pressure measurement (mmHg) |
 | `diastolic` | Integer | Diastolic pressure measurement (mmHg) |
 | `age` | Integer | User age (Years) |
+| `metadata` | JSONB | Guideline metadata (AHA category, age-layer flags, emergency and regional notes, ICD-11 code) |
 | `created_at` | Timestamptz | Timestamp of when the measurement was recorded |
 
 ## 🖥️ UI Showcase
@@ -56,10 +57,10 @@ Detailed history log with instant classification badges.
 
 ## 🧠 Key Features & Logic
 
-### Blood Pressure Classification
-The application automatically categorizes readings based on **ACC/AHA** clinical guidelines:
+### Multi-Layered Clinical Decision Logic
+The application uses a layered rule engine that combines global and regional standards:
 
-| Category | Systolic (mmHg) | | Diastolic (mmHg) |
+| Category (AHA 2017 core) | Systolic (mmHg) | | Diastolic (mmHg) |
 | :--- | :--- | :--- | :--- |
 | **Normal** | < 120 | AND | < 80 |
 | **Elevated** | 120 – 129 | AND | < 80 |
@@ -67,10 +68,17 @@ The application automatically categorizes readings based on **ACC/AHA** clinical
 | **Stage 2** | ≥ 140 | OR | ≥ 90 |
 | **Crisis** | ≥ 180 | OR | ≥ 120 |
 
+Additional layers applied on top of AHA core logic:
+- **JNC-8 / ACP Age Context:** For users aged 60+, systolic `<150` with diastolic `<90` is shown with age-adjusted normal context while retaining AHA category metadata.
+- **Emergency Trigger (ACC/AHA ACS 2021 + ESC NSTEMI 2023):** `Systolic > 180` or `Diastolic > 120` raises a **Critical Alert** requiring immediate evaluation.
+- **ESC 2023 Context:** Readings above `140/90` append: *"Meets ESC 2023 Hypertension criteria for pharmacological consideration"*.
+- **WHO ICD-11 Coding:** Every displayed result appends: *"WHO ICD-11 Code: BA00 (Essential Hypertension)"*.
+
 ### Core Functionality
 - **Instant Classification:** Real-time feedback and clinical advice for every reading.
 - **Trend Visualizations:** Interactive charts showing systolic and diastolic progress over time.
 - **PDF Reports:** Generate and download professional medical reports for sharing with physicians.
+- **WHO Lifestyle Guidance:** Sodium under 5g/day, 150 min/week moderate aerobic activity, DASH nutrition, and stress management.
 - **Responsive Design:** A premium experience across mobile, tablet, and desktop.
 - **Dark Mode:** Full support for system-wide dark and light themes.
 

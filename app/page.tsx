@@ -1,6 +1,12 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { jsPDF } from "jspdf";
 import type { Session } from "@supabase/supabase-js";
 import { useTheme } from "next-themes";
@@ -43,6 +49,16 @@ type Profile = {
 
 type BpCategory = "Normal" | "Elevated" | "Stage 1" | "Stage 2" | "Crisis";
 
+type BpMetadata = {
+  ahaCategory: BpCategory;
+  appliedStandard: "AHA 2017" | "AHA 2017 + JNC-8/ACP age layer";
+  ageRuleApplied: boolean;
+  ageBasedNormalOverride: boolean;
+  icd11Code: "BA00 (Essential Hypertension)";
+  escPharmaConsideration: boolean;
+  criticalAlert: boolean;
+};
+
 type Reading = {
   id: string;
   systolic: number;
@@ -50,6 +66,7 @@ type Reading = {
   /** Stored in Supabase `readings.age` column. */
   age: number;
   category: BpCategory;
+  metadata: BpMetadata;
   createdAt: string;
 };
 
@@ -79,6 +96,34 @@ function categorizeReading(systolic: number, diastolic: number): BpCategory {
   }
   if (systolic >= 120 && systolic <= 129 && diastolic < 80) return "Elevated";
   return "Normal";
+}
+
+function analyzeReading(
+  systolic: number,
+  diastolic: number,
+  age: number,
+): { category: BpCategory; metadata: BpMetadata } {
+  const ahaCategory = categorizeReading(systolic, diastolic);
+  const ageRuleApplied = age >= 60;
+  const ageBasedNormalOverride =
+    ageRuleApplied && systolic < 150 && diastolic < 90;
+  const criticalAlert = systolic > 180 || diastolic > 120;
+  const escPharmaConsideration = systolic > 140 || diastolic > 90;
+
+  return {
+    category: ageBasedNormalOverride ? "Normal" : ahaCategory,
+    metadata: {
+      ahaCategory,
+      appliedStandard: ageRuleApplied
+        ? "AHA 2017 + JNC-8/ACP age layer"
+        : "AHA 2017",
+      ageRuleApplied,
+      ageBasedNormalOverride,
+      icd11Code: "BA00 (Essential Hypertension)",
+      escPharmaConsideration,
+      criticalAlert,
+    },
+  };
 }
 
 const categoryStyles: Record<
@@ -111,31 +156,33 @@ const categoryStyles: Record<
   },
   Crisis: {
     ring: "ring-red-600/70",
-    badge: "bg-red-600 text-white",
+    badge: "bg-red-700 text-white",
     text: "text-red-700",
-    note: "Hypertensive crisis. Seek urgent medical care immediately.",
+    note: "Hypertension Crisis. Seek immediate medical attention.",
   },
 };
 
 const clinicalAdvice: Record<BpCategory, string[]> = {
   Normal: [
     "Continue balanced DASH-style meals with fruits, vegetables, and whole grains.",
-    "Maintain regular physical activity and hydration.",
+    "Keep sodium intake below 5g of salt per day per WHO guidance.",
+    "Maintain at least 150 minutes of moderate-intensity aerobic activity weekly.",
     "Recheck blood pressure weekly and continue healthy routines.",
   ],
   Elevated: [
-    "Reduce sodium intake and avoid heavily processed foods.",
-    "Exercise regularly (at least 150 minutes per week).",
-    "Manage stress and monitor blood pressure every few days.",
+    "Reduce sodium intake to less than 5g/day and avoid heavily processed foods.",
+    "Exercise regularly with 150 minutes of moderate-intensity aerobic activity per week.",
+    "Practice stress management daily and monitor blood pressure every few days.",
   ],
   "Stage 1": [
-    "Follow strict low-salt nutrition and increase fiber intake.",
-    "Maintain routine exercise and sleep hygiene.",
+    "Follow DASH-focused, low-salt nutrition and increase fiber intake.",
+    "Maintain 150 minutes/week of moderate-intensity aerobic activity and sleep hygiene.",
+    "Use stress-reduction techniques such as breathing exercises or mindfulness.",
     "Consult your doctor if readings stay elevated consistently.",
   ],
   "Stage 2": [
-    "Reduce sodium aggressively and follow a DASH diet plan.",
-    "Exercise regularly, manage stress, and avoid tobacco and excess alcohol.",
+    "Reduce sodium aggressively to under 5g/day and follow a DASH diet plan.",
+    "Exercise at least 150 minutes/week, manage stress, and avoid tobacco and excess alcohol.",
     "Consult your physician promptly for treatment planning and close monitoring.",
   ],
   Crisis: [
@@ -144,6 +191,12 @@ const clinicalAdvice: Record<BpCategory, string[]> = {
     "Do not delay medical treatment if severe symptoms are present.",
   ],
 };
+
+const WHO_ICD11_TEXT = "WHO ICD-11 Code: BA00 (Essential Hypertension)";
+const CRITICAL_ALERT_GUIDANCE =
+  "Based on ACC/AHA 2021 ACS and ESC 2023 NSTEMI Guidelines, immediate clinical evaluation is required to rule out acute cardiac events.";
+const ESC_PHARMA_NOTE =
+  "Meets ESC 2023 Hypertension criteria for pharmacological consideration";
 
 /** ACC/AHA-style reference ranges for patient education (PDF + UI context). */
 const ahaJnc8ReferenceRows: {
@@ -177,11 +230,11 @@ const structuredTips = [
     ],
   },
   {
-    title: "Sodium Intake (<1,500 mg/day)",
+    title: "Sodium Intake (<5g/day salt)",
     icon: Ban,
     color: "bg-amber-50 text-amber-700 border-amber-100",
     points: [
-      "Read nutrition labels and choose low-sodium options.",
+      "Follow WHO guidance: keep total salt intake below 5g/day.",
       "Replace added salt with herbs, lemon, and natural spices.",
     ],
   },
@@ -253,6 +306,43 @@ const primaryBtnClass =
 const bpFormCardClass =
   "rounded-xl border border-slate-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-[#252525]";
 
+const medicalGuidelineReferences = [
+  {
+    title: "AHA/ACC 2017 Hypertension Guideline",
+    summary:
+      "Core blood pressure categorization used across all readings (Normal, Elevated, Stage 1, Stage 2, Crisis).",
+    citation:
+      "Whelton PK, et al. 2017 ACC/AHA Guideline for the Prevention, Detection, Evaluation, and Management of High Blood Pressure in Adults.",
+  },
+  {
+    title: "JNC-8 / ACP Age-Based Layer",
+    summary:
+      "For age 60+, an additional layer recognizes systolic values below 150 mmHg with diastolic below 90 mmHg as age-adjusted normal context.",
+    citation:
+      "James PA, et al. JAMA 2014 (JNC-8) and ACP/AAFP guidance for older adults.",
+  },
+  {
+    title: "ACC/AHA ACS 2021 + ESC NSTEMI 2023",
+    summary:
+      "Readings above 180/120 trigger a Critical Alert to prioritize emergency assessment for possible acute cardiac events.",
+    citation:
+      "2021 AHA/ACC Chest Pain and ACS-focused updates; 2023 ESC Acute Coronary Syndromes guideline.",
+  },
+  {
+    title: "ESC 2023 Hypertension Context",
+    summary:
+      "Readings above 140/90 include a secondary note indicating ESC pharmacological consideration threshold.",
+    citation:
+      "2023 ESC Guidelines for the management of arterial hypertension.",
+  },
+  {
+    title: "WHO ICD-11",
+    summary:
+      "All results append ICD-11 coding metadata for essential hypertension documentation.",
+    citation: "WHO ICD-11: BA00 Essential Hypertension.",
+  },
+];
+
 function getUserInitials(name: string, email: string): string {
   const n = name.trim();
   if (n) {
@@ -267,19 +357,6 @@ function getUserInitials(name: string, email: string): string {
   return e.slice(0, 2).toUpperCase();
 }
 
-function formatLongDate(d: string | undefined): string {
-  if (!d) return "—";
-  try {
-    return new Date(d).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "long",
-      day: "numeric",
-    });
-  } catch {
-    return "—";
-  }
-}
-
 function formatDateTimeLocal(d: string | undefined): string {
   if (!d) return "—";
   try {
@@ -288,8 +365,6 @@ function formatDateTimeLocal(d: string | undefined): string {
     return "—";
   }
 }
-
-const THEME_STORAGE_KEY = "hb-theme";
 
 const INVALID_EMAIL_MSG = "Please enter a valid email address.";
 
@@ -306,6 +381,32 @@ function isValidEmailFormat(email: string): boolean {
   const tld = domainParts[domainParts.length - 1];
   if (!tld || tld.length < 2) return false;
   return true;
+}
+
+function isBpMetadata(value: unknown): value is BpMetadata {
+  if (!value || typeof value !== "object") return false;
+  const metadata = value as Partial<BpMetadata>;
+  return (
+    typeof metadata.ahaCategory === "string" &&
+    typeof metadata.appliedStandard === "string" &&
+    typeof metadata.ageRuleApplied === "boolean" &&
+    typeof metadata.ageBasedNormalOverride === "boolean" &&
+    typeof metadata.icd11Code === "string" &&
+    typeof metadata.escPharmaConsideration === "boolean" &&
+    typeof metadata.criticalAlert === "boolean"
+  );
+}
+
+function getReadingGuidance(reading: Reading): string[] {
+  const guidance = [...clinicalAdvice[reading.category]];
+  if (reading.metadata.ageBasedNormalOverride) {
+    guidance.push(
+      "Age-adjusted layer applied (JNC-8/ACP context): systolic under 150 mmHg and diastolic under 90 mmHg.",
+    );
+  }
+  if (reading.metadata.escPharmaConsideration) guidance.push(ESC_PHARMA_NOTE);
+  guidance.push(WHO_ICD11_TEXT);
+  return guidance;
 }
 
 export default function Home() {
@@ -330,21 +431,46 @@ export default function Home() {
   const [bpFormWarning, setBpFormWarning] = useState("");
   const [fetchError, setFetchError] = useState("");
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const { setTheme, resolvedTheme } = useTheme();
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
 
   const darkMode = resolvedTheme === "dark";
 
   const fetchReadings = async (userId: string) => {
-    const { data, error } = await supabase
+    let data:
+      | {
+          id: string;
+          systolic: number;
+          diastolic: number;
+          age: number;
+          created_at: string;
+          metadata?: unknown;
+        }[]
+      | null = null;
+    let error: { message: string } | null = null;
+
+    const withMetadata = await supabase
       .from("readings")
-      .select("id, systolic, diastolic, age, created_at")
+      .select("id, systolic, diastolic, age, created_at, metadata")
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
+
+    if (withMetadata.error?.message?.toLowerCase().includes("metadata")) {
+      const fallback = await supabase
+        .from("readings")
+        .select("id, systolic, diastolic, age, created_at")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+      data = fallback.data;
+      error = fallback.error;
+    } else {
+      data = withMetadata.data;
+      error = withMetadata.error;
+    }
 
     if (error) {
       setFetchError(error.message);
@@ -353,14 +479,20 @@ export default function Home() {
 
     setFetchError("");
     setReadings(
-      (data ?? []).map((row) => ({
-        id: row.id,
-        systolic: row.systolic,
-        diastolic: row.diastolic,
-        age: row.age,
-        category: categorizeReading(row.systolic, row.diastolic),
-        createdAt: row.created_at,
-      })),
+      (data ?? []).map((row) => {
+        const analysis = analyzeReading(row.systolic, row.diastolic, row.age);
+        return {
+          ...analysis,
+          id: row.id,
+          systolic: row.systolic,
+          diastolic: row.diastolic,
+          age: row.age,
+          metadata: isBpMetadata(row.metadata)
+            ? row.metadata
+            : analysis.metadata,
+          createdAt: row.created_at,
+        };
+      }),
     );
   };
 
@@ -400,9 +532,10 @@ export default function Home() {
     return () => window.clearTimeout(t);
   }, [saveSuccessToast]);
 
+  const fallbackReadingAnalysis = analyzeReading(119, 79, 59);
   const latestReading = readings[0];
-  const latestCategory = latestReading?.category ?? "Normal";
-  const style = categoryStyles[latestCategory];
+  const latestCategory =
+    latestReading?.category ?? fallbackReadingAnalysis.category;
   const displayName = profile.name || session?.user.email || "User";
 
   const chartData = useMemo(
@@ -418,7 +551,7 @@ export default function Home() {
     [readings],
   );
 
-  const downloadPdfReport = () => {
+  const downloadClinicalReport = () => {
     const doc = new jsPDF();
     const pageW = doc.internal.pageSize.getWidth();
     const margin = 20;
@@ -490,7 +623,18 @@ export default function Home() {
     doc.setFont("helvetica", "bold");
     doc.text("Classification:", margin, y);
     doc.setFont("helvetica", "normal");
-    doc.text(latestCategory, margin + 40, y);
+    doc.text(
+      latestReading
+        ? `${latestCategory} (${latestReading.metadata.appliedStandard})`
+        : latestCategory,
+      margin + 40,
+      y,
+    );
+    y += 7;
+    doc.setFont("helvetica", "bold");
+    doc.text("WHO ICD-11:", margin, y);
+    doc.setFont("helvetica", "normal");
+    doc.text(WHO_ICD11_TEXT.replace("WHO ICD-11 Code: ", ""), margin + 40, y);
     y += 12;
 
     // Medical Standards Reference Table
@@ -519,10 +663,9 @@ export default function Home() {
     // Recommendations
     sectionTitle("Clinical Guidance");
     doc.setFontSize(10);
-    const recLines: string[] = [
-      ...clinicalAdvice[latestCategory],
-      "Lifestyle: DASH-style nutrition, limit sodium (<1500mg), 150+ min/week activity.",
-    ];
+    const recLines: string[] = latestReading
+      ? getReadingGuidance(latestReading)
+      : [...clinicalAdvice[latestCategory], WHO_ICD11_TEXT];
     for (const line of recLines) {
       const wrapped = doc.splitTextToSize(`• ${line}`, contentW - 5);
       for (const wline of wrapped) {
@@ -536,14 +679,94 @@ export default function Home() {
     doc.setTextColor(150, 150, 150);
     const footerY = doc.internal.pageSize.getHeight() - 15;
     doc.text(
-      "This report is generated based on AHA/ACC 2017 & JNC-8 medical standards.",
+      "Generated using AHA 2017, JNC-8/ACP, ACC/AHA ACS 2021, ESC NSTEMI 2023, ESC 2023 HTN context, and WHO ICD-11 (BA00).",
       pageW / 2,
       footerY,
       { align: "center" },
     );
 
     doc.save(
-      `hypertension-buddy-report-${new Date().toISOString().slice(0, 10)}.pdf`,
+      `hypertension-buddy-clinical-report-${new Date().toISOString().slice(0, 10)}.pdf`,
+    );
+  };
+
+  const downloadHistoryPdfReport = () => {
+    const doc = new jsPDF();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 15;
+    const contentW = pageW - margin * 2;
+    let y = margin;
+
+    const ensureSpace = (needed: number) => {
+      if (y + needed > pageH - margin) {
+        doc.addPage();
+        y = margin;
+        return true;
+      }
+      return false;
+    };
+
+    // Header
+    doc.setFont("helvetica", "bold");
+    doc.setFontSize(18);
+    doc.text("Hypertension Buddy - Patient History Report", margin, y);
+    y += 10;
+    doc.setFontSize(10);
+    doc.setFont("helvetica", "normal");
+    doc.text(`Patient: ${displayName}`, margin, y);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, pageW - margin, y, {
+      align: "right",
+    });
+    y += 10;
+
+    // Table Header
+    doc.setFontSize(9);
+    doc.setFont("helvetica", "bold");
+    doc.setFillColor(245, 245, 245);
+    doc.rect(margin, y - 5, contentW, 8, "F");
+    doc.text("Date & Time", margin + 2, y);
+    doc.text("Systolic", margin + 60, y);
+    doc.text("Diastolic", margin + 85, y);
+    doc.text("Age", margin + 110, y);
+    doc.text("Medical Category", margin + 130, y);
+    y += 8;
+
+    doc.setFont("helvetica", "normal");
+    doc.setDrawColor(230, 230, 230);
+    doc.setLineWidth(0.1);
+
+    for (const reading of readings) {
+      ensureSpace(10);
+      const dateStr = new Date(reading.createdAt).toLocaleString([], {
+        dateStyle: "medium",
+        timeStyle: "short",
+      });
+      doc.text(dateStr, margin + 2, y);
+      doc.text(String(reading.systolic), margin + 60, y);
+      doc.text(String(reading.diastolic), margin + 85, y);
+      doc.text(String(reading.age), margin + 110, y);
+      doc.text(reading.category, margin + 130, y);
+      doc.line(margin, y + 3, margin + contentW, y + 3);
+      y += 8;
+    }
+
+    // Footer
+    const pageCount = (doc as any).internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFontSize(8);
+      doc.setTextColor(150, 150, 150);
+      doc.text(
+        `History Report | Page ${i} of ${pageCount} | Medical Standards Applied`,
+        pageW / 2,
+        pageH - 10,
+        { align: "center" },
+      );
+    }
+
+    doc.save(
+      `hypertension-buddy-history-${new Date().toISOString().slice(0, 10)}.pdf`,
     );
   };
 
@@ -582,16 +805,47 @@ export default function Home() {
 
     setBpFormWarning("");
     setSaveError("");
-    const { data, error } = await supabase
+    const analysis = analyzeReading(sys, dia, age);
+
+    let data: {
+      id: string;
+      systolic: number;
+      diastolic: number;
+      age: number;
+      created_at: string;
+      metadata?: unknown;
+    } | null = null;
+    let error: { message: string } | null = null;
+
+    const withMetadata = await supabase
       .from("readings")
       .insert({
         user_id: session.user.id,
         systolic: sys,
         diastolic: dia,
         age: age,
+        metadata: analysis.metadata,
       })
-      .select("id, systolic, diastolic, age, created_at")
+      .select("id, systolic, diastolic, age, created_at, metadata")
       .single();
+
+    if (withMetadata.error?.message?.toLowerCase().includes("metadata")) {
+      const fallback = await supabase
+        .from("readings")
+        .insert({
+          user_id: session.user.id,
+          systolic: sys,
+          diastolic: dia,
+          age: age,
+        })
+        .select("id, systolic, diastolic, age, created_at")
+        .single();
+      data = fallback.data;
+      error = fallback.error;
+    } else {
+      data = withMetadata.data;
+      error = withMetadata.error;
+    }
 
     if (error || !data) {
       setSaveError(error?.message ?? "Could not save reading.");
@@ -603,7 +857,8 @@ export default function Home() {
       systolic: data.systolic,
       diastolic: data.diastolic,
       age: data.age,
-      category: categorizeReading(data.systolic, data.diastolic),
+      category: analysis.category,
+      metadata: isBpMetadata(data.metadata) ? data.metadata : analysis.metadata,
       createdAt: data.created_at,
     };
 
@@ -682,7 +937,7 @@ export default function Home() {
     const u = session?.user;
     const email = u?.email ?? "—";
     const initials = getUserInitials(profile.name, email === "—" ? "" : email);
-    const memberSince = formatLongDate(u?.created_at);
+    const profileHeadlineName = profile.name.trim() || email;
     const accountCreated = formatDateTimeLocal(u?.created_at);
     const lastSignIn = formatDateTimeLocal(u?.last_sign_in_at);
 
@@ -692,8 +947,8 @@ export default function Home() {
         <section className='overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50 transition-all dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none'>
           <div className='relative h-32 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-900 dark:to-indigo-950'>
             <div className='absolute -bottom-12 left-8'>
-              <div className='flex h-24 w-24 items-center justify-center rounded-2xl bg-white p-1 shadow-lg dark:bg-zinc-800'>
-                <div className='flex h-full w-full items-center justify-center rounded-xl bg-[#2563eb] text-2xl font-bold text-white shadow-inner'>
+              <div className='flex h-24 w-24 items-center justify-center rounded-full bg-white p-1.5 shadow-lg dark:bg-zinc-800'>
+                <div className='flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-2xl font-bold text-white shadow-inner'>
                   {initials}
                 </div>
               </div>
@@ -702,9 +957,15 @@ export default function Home() {
           <div className='pb-8 pl-8 pr-8 pt-16'>
             <div className='flex flex-col gap-6 md:flex-row md:items-end md:justify-between'>
               <div>
-                <h2 className='text-2xl font-bold text-slate-900 dark:text-zinc-50'>
-                  Your Profile
-                </h2>
+                <div className='flex flex-wrap items-center gap-2'>
+                  <h2 className='text-2xl font-bold text-slate-900 dark:text-zinc-50'>
+                    {profileHeadlineName}
+                  </h2>
+                  <span className='inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800'>
+                    <Shield className='h-3 w-3' />
+                    Active Patient
+                  </span>
+                </div>
                 <p className='mt-1 text-slate-500 dark:text-zinc-400'>
                   Manage your personal details and account settings
                 </p>
@@ -847,7 +1108,7 @@ export default function Home() {
         </div>
         <button
           type='button'
-          onClick={downloadPdfReport}
+          onClick={downloadHistoryPdfReport}
           className={`${primaryBtnClass} w-full sm:w-auto shadow-lg shadow-blue-500/10`}
         >
           Download Data Report
@@ -892,11 +1153,21 @@ export default function Home() {
                     {reading.age}
                   </td>
                   <td className='px-6 py-4'>
-                    <span
-                      className={`inline-flex rounded-xl px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${categoryStyles[reading.category].badge}`}
-                    >
-                      {reading.category}
-                    </span>
+                    <div className='space-y-1'>
+                      <span
+                        className={`inline-flex rounded-xl px-3 py-1 text-[10px] font-bold uppercase tracking-wider ${categoryStyles[reading.category].badge}`}
+                      >
+                        {reading.category}
+                      </span>
+                      <p className='text-[10px] font-medium text-slate-500 dark:text-zinc-400'>
+                        WHO ICD-11: {reading.metadata.icd11Code}
+                      </p>
+                      {reading.metadata.criticalAlert ? (
+                        <p className='text-[10px] font-bold uppercase tracking-wider text-red-600 dark:text-red-400'>
+                          Critical Alert
+                        </p>
+                      ) : null}
+                    </div>
                   </td>
                   <td className='px-6 py-4 text-center'>
                     <button
@@ -991,30 +1262,31 @@ export default function Home() {
     <div className='space-y-10'>
       <div className='text-center sm:text-left'>
         <p className='text-xs font-medium text-slate-400 dark:text-zinc-500 uppercase tracking-widest'>
-          Clinical Guidelines based on AHA/ACC 2017 and JNC-8 standards
+          Layered Clinical Intelligence: AHA 2017 + JNC-8/ACP + ESC + ACC/AHA
+          ACS + WHO ICD-11
         </p>
       </div>
 
-      <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
-        {(["Normal", "Elevated", "Stage 1", "Stage 2"] as BpCategory[]).map(
-          (category) => (
-            <div
-              key={category}
-              className={`${dataCardClass} flex flex-col justify-between transition-all duration-300 hover:-translate-y-1`}
-            >
-              <div>
-                <div
-                  className={`inline-flex rounded-xl px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${categoryStyles[category].badge}`}
-                >
-                  {category}
-                </div>
-                <p className='mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-zinc-300'>
-                  {categoryStyles[category].note}
-                </p>
+      <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5'>
+        {(
+          ["Normal", "Elevated", "Stage 1", "Stage 2", "Crisis"] as BpCategory[]
+        ).map((category) => (
+          <div
+            key={category}
+            className={`${dataCardClass} flex flex-col justify-between transition-all duration-300 hover:-translate-y-1`}
+          >
+            <div>
+              <div
+                className={`inline-flex rounded-xl px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${categoryStyles[category].badge}`}
+              >
+                {category}
               </div>
+              <p className='mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-zinc-300'>
+                {categoryStyles[category].note}
+              </p>
             </div>
-          ),
-        )}
+          </div>
+        ))}
       </section>
 
       <section className={`${shellCardClass} p-8 overflow-hidden`}>
@@ -1050,6 +1322,40 @@ export default function Home() {
             </tbody>
           </table>
         </div>
+        <p className='mt-3 text-xs text-slate-500 dark:text-zinc-400'>
+          Age-based layer: for adults aged 60+, systolic below 150 mmHg with
+          diastolic below 90 mmHg is shown with age-adjusted normal context
+          (JNC-8/ACP), while AHA 2017 classification remains tracked.
+        </p>
+      </section>
+
+      <section className={`${shellCardClass} p-8`}>
+        <h2 className='text-xl font-bold text-slate-900 dark:text-zinc-50'>
+          Integrated Medical Standards
+        </h2>
+        <p className='mt-2 text-sm text-slate-500 dark:text-zinc-400'>
+          These citations describe how the app now combines classification,
+          emergency triage, regional context, and coding metadata in one result
+          flow.
+        </p>
+        <div className='mt-6 grid gap-4 md:grid-cols-2'>
+          {medicalGuidelineReferences.map((item) => (
+            <article
+              key={item.title}
+              className='rounded-2xl border border-slate-100 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900'
+            >
+              <h3 className='text-sm font-bold uppercase tracking-wide text-slate-900 dark:text-zinc-100'>
+                {item.title}
+              </h3>
+              <p className='mt-2 text-sm text-slate-600 dark:text-zinc-300'>
+                {item.summary}
+              </p>
+              <p className='mt-3 text-xs text-slate-500 dark:text-zinc-400'>
+                Citation: {item.citation}
+              </p>
+            </article>
+          ))}
+        </div>
       </section>
     </div>
   );
@@ -1057,30 +1363,36 @@ export default function Home() {
   const renderDashboard = () => {
     return (
       <div className='space-y-10'>
-        <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4'>
-          {(["Normal", "Elevated", "Stage 1", "Stage 2"] as BpCategory[]).map(
-            (category) => (
-              <div
-                key={category}
-                className={`${dataCardClass} ${
-                  latestCategory === category
-                    ? `ring-4 ring-blue-500/20 ring-offset-2 ring-offset-slate-50 dark:ring-offset-zinc-950 ${categoryStyles[category].ring}`
-                    : ""
-                } flex flex-col justify-between transition-all duration-300 hover:-translate-y-1`}
-              >
-                <div>
-                  <div
-                    className={`inline-flex rounded-xl px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${categoryStyles[category].badge}`}
-                  >
-                    {category}
-                  </div>
-                  <p className='mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-zinc-300'>
-                    {categoryStyles[category].note}
-                  </p>
+        <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5'>
+          {(
+            [
+              "Normal",
+              "Elevated",
+              "Stage 1",
+              "Stage 2",
+              "Crisis",
+            ] as BpCategory[]
+          ).map((category) => (
+            <div
+              key={category}
+              className={`${dataCardClass} ${
+                latestCategory === category
+                  ? `ring-4 ring-blue-500/20 ring-offset-2 ring-offset-slate-50 dark:ring-offset-zinc-950 ${categoryStyles[category].ring}`
+                  : ""
+              } flex flex-col justify-between transition-all duration-300 hover:-translate-y-1`}
+            >
+              <div>
+                <div
+                  className={`inline-flex rounded-xl px-4 py-1.5 text-xs font-bold uppercase tracking-wider ${categoryStyles[category].badge}`}
+                >
+                  {category}
                 </div>
+                <p className='mt-4 text-sm font-medium leading-relaxed text-slate-600 dark:text-zinc-300'>
+                  {categoryStyles[category].note}
+                </p>
               </div>
-            ),
-          )}
+            </div>
+          ))}
         </section>
 
         <div className='flex items-center justify-between gap-4'>
@@ -1119,7 +1431,7 @@ export default function Home() {
             </div>
             <button
               type='button'
-              onClick={downloadPdfReport}
+              onClick={downloadHistoryPdfReport}
               className={`${primaryBtnClass} w-full sm:w-auto shadow-lg shadow-blue-500/10`}
             >
               Download Full Report
@@ -1309,7 +1621,14 @@ export default function Home() {
 
   return (
     <div className='min-h-screen bg-slate-50 text-slate-800 dark:bg-zinc-950 dark:text-zinc-100'>
-      <div className='fixed right-4 top-[max(12px,env(safe-area-inset-top,0px))] z-[45] sm:right-5 sm:top-5'>
+      <div className='fixed right-4 top-[max(12px,env(safe-area-inset-top,0px))] z-[100] flex items-center gap-2 sm:right-5 sm:top-5'>
+        <button
+          onClick={() => setActiveSection("Profile")}
+          className='hidden max-w-[220px] items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs font-medium text-slate-600 ring-1 ring-slate-200 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:ring-blue-300 dark:bg-zinc-800/90 dark:text-zinc-300 dark:ring-zinc-700 dark:hover:ring-blue-800 md:flex'
+        >
+          <User className='h-3.5 w-3.5 text-blue-500' />
+          <span className='truncate'>{displayName}</span>
+        </button>
         {themeToggle}
       </div>
 
@@ -1344,7 +1663,7 @@ export default function Home() {
         </div>
       ) : null}
 
-      <header className='sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/90 px-4 py-3 pr-16 shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/90 lg:hidden'>
+      <header className='sticky top-0 z-[90] flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/95 px-4 py-3 pr-16 shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/95 lg:hidden'>
         <button
           type='button'
           onClick={() => setMobileNavOpen(true)}
@@ -1366,9 +1685,12 @@ export default function Home() {
             />
           </svg>
         </button>
-        <span className='truncate text-center text-sm font-semibold text-slate-900 dark:text-zinc-50'>
-          Hypertension Buddy
-        </span>
+        <div className='flex items-center gap-2 truncate'>
+          <Heart className='h-4 w-4 text-red-500 fill-red-500' />
+          <span className='truncate text-sm font-semibold text-slate-900 dark:text-zinc-50'>
+            Hypertension Buddy
+          </span>
+        </div>
         <span className='w-11 shrink-0' aria-hidden />
       </header>
 
@@ -1463,9 +1785,10 @@ export default function Home() {
 
       <div className='mx-auto grid w-full max-w-7xl gap-8 p-4 sm:p-8 lg:grid-cols-[280px_1fr] lg:p-10'>
         <aside
-          className={`${shellCardClass} hidden h-fit p-6 lg:block sticky top-10 shadow-xl shadow-slate-200/50 dark:shadow-none`}
+          className={`${shellCardClass} hidden h-fit p-6 lg:block sticky top-[80px] shadow-xl shadow-slate-200/50 dark:shadow-none`}
         >
-          <div className='mb-8 rounded-2xl bg-gradient-to-br from-[#2563eb] to-blue-700 p-6 text-white shadow-lg shadow-blue-500/20'>
+          <div className='mb-8 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#2563eb] to-blue-700 p-6 text-white shadow-lg shadow-blue-500/20'>
+            <Heart className='h-6 w-6 text-white fill-white' />
             <h2 className='text-xl font-black tracking-tight'>
               HYPERTENSION BUDDY
             </h2>
@@ -1664,6 +1987,9 @@ export default function Home() {
                   <h3 className='truncate text-lg font-black tracking-tight sm:text-2xl'>
                     {latestSubmitted.category}
                   </h3>
+                  <p className='mt-0.5 text-[10px] font-semibold text-white/80 sm:text-xs'>
+                    {latestSubmitted.metadata.appliedStandard}
+                  </p>
                 </div>
                 <div className='shrink-0 text-right'>
                   <p className='text-[9px] font-bold uppercase tracking-widest text-white/80 sm:text-[10px]'>
@@ -1680,6 +2006,15 @@ export default function Home() {
             </div>
 
             <div className='p-4 sm:p-5'>
+              {latestSubmitted.metadata.criticalAlert ? (
+                <div className='mb-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-semibold text-red-700 dark:border-red-900/40 dark:bg-red-950/30 dark:text-red-300 sm:text-sm'>
+                  <p className='mb-1 text-[10px] font-black uppercase tracking-wider sm:text-xs'>
+                    Critical Alert
+                  </p>
+                  <p>{CRITICAL_ALERT_GUIDANCE}</p>
+                </div>
+              ) : null}
+
               <div className='grid grid-cols-1 gap-3 md:grid-cols-2 md:gap-4'>
                 {/* Clinical Guidance Column */}
                 <div className='rounded-2xl bg-blue-50/50 p-3 ring-1 ring-blue-100 dark:bg-blue-950/20 dark:ring-blue-900/40 sm:p-4'>
@@ -1690,7 +2025,7 @@ export default function Home() {
                     </p>
                   </div>
                   <ul className='space-y-1.5 text-xs leading-relaxed text-slate-700 dark:text-zinc-300 sm:space-y-2 sm:text-sm'>
-                    {clinicalAdvice[latestSubmitted.category].map((item) => (
+                    {getReadingGuidance(latestSubmitted).map((item) => (
                       <li key={item} className='flex items-start gap-2'>
                         <span className='mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blue-400 opacity-60' />
                         {item}
@@ -1727,7 +2062,7 @@ export default function Home() {
               <div className='mt-4 flex flex-wrap items-center justify-center gap-2 border-t border-slate-100 pt-4 dark:border-zinc-800 sm:mt-6 sm:gap-3 sm:pt-5'>
                 <button
                   type='button'
-                  onClick={downloadPdfReport}
+                  onClick={downloadClinicalReport}
                   className='inline-flex items-center gap-1.5 rounded-xl bg-blue-600 px-3 py-2 text-[10px] font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 hover:-translate-y-0.5 active:scale-95 sm:gap-2 sm:px-4 sm:py-2.5 sm:text-xs'
                 >
                   <svg
@@ -1753,8 +2088,8 @@ export default function Home() {
 
               <hr className='my-4 border-slate-100 dark:border-zinc-800' />
               <p className='mb-4 text-center text-[10px] italic text-slate-400 dark:text-zinc-500'>
-                Source: Clinical guidelines based on AHA/ACC 2017 and JNC-8
-                standards
+                Source: AHA 2017, JNC-8/ACP, ACC/AHA ACS 2021, ESC NSTEMI 2023,
+                ESC 2023 and WHO ICD-11 ({latestSubmitted.metadata.icd11Code})
               </p>
 
               <button

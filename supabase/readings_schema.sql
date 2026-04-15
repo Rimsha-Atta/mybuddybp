@@ -6,6 +6,7 @@ create table if not exists public.readings (
   systolic integer not null check (systolic >= 70 and systolic <= 260),
   diastolic integer not null check (diastolic >= 40 and diastolic <= 180),
   age integer not null check (age >= 1 and age <= 120),
+  metadata jsonb not null default '{}'::jsonb,
   created_at timestamptz not null default now()
 );
 
