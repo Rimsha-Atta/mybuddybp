@@ -9,6 +9,7 @@ import {
 } from "react";
 import { jsPDF } from "jspdf";
 import type { Session } from "@supabase/supabase-js";
+import { usePathname, useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
   CartesianGrid,
@@ -24,14 +25,22 @@ import {
   Activity,
   Apple,
   Ban,
+  BookOpenText,
   Brain,
   Calendar,
+  CalendarDays,
+  Check,
   CigaretteOff,
   Clock,
+  Copy,
   Eye,
   EyeOff,
   Fingerprint,
   Heart,
+  History,
+  LayoutDashboard,
+  Lightbulb,
+  LogOut,
   Mail,
   Moon,
   Pill,
@@ -77,12 +86,14 @@ type Section =
   | "Health Tips"
   | "Medical Standards";
 
-const sections: Section[] = [
-  "Profile",
-  "Dashboard",
-  "History",
-  "Health Tips",
-  "Medical Standards",
+const sidebarNavItems: {
+  label: Exclude<Section, "Profile">;
+  icon: typeof LayoutDashboard;
+}[] = [
+  { label: "Dashboard", icon: LayoutDashboard },
+  { label: "History", icon: History },
+  { label: "Health Tips", icon: Lightbulb },
+  { label: "Medical Standards", icon: BookOpenText },
 ];
 
 function categorizeReading(systolic: number, diastolic: number): BpCategory {
@@ -410,8 +421,21 @@ function getReadingGuidance(reading: Reading): string[] {
 }
 
 export default function Home() {
-  const [activeSection, setActiveSection] = useState<Section>("Dashboard");
-  const [profile, setProfile] = useState<Profile>({ name: "" });
+  const pathname = usePathname();
+  const router = useRouter();
+  const [activeSection, setActiveSection] = useState<Section>(() =>
+    pathname === "/profile" ? "Profile" : "Dashboard",
+  );
+  const [profile, setProfile] = useState<Profile>(() => {
+    if (typeof window === "undefined") return { name: "" };
+    try {
+      return {
+        name: window.localStorage.getItem("hb-profile-name:last") ?? "",
+      };
+    } catch {
+      return { name: "" };
+    }
+  });
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
   const [readingAge, setReadingAge] = useState("");
@@ -431,6 +455,7 @@ export default function Home() {
   const [bpFormWarning, setBpFormWarning] = useState("");
   const [fetchError, setFetchError] = useState("");
   const [saveSuccessToast, setSaveSuccessToast] = useState(false);
+  const [idCopied, setIdCopied] = useState(false);
   const { setTheme, resolvedTheme } = useTheme();
   const mounted = useSyncExternalStore(
     () => () => {},
@@ -439,6 +464,49 @@ export default function Home() {
   );
 
   const darkMode = resolvedTheme === "dark";
+  const profileName = profile.name.trim();
+  const profileDisplayLabel = profileName || session?.user?.email || "User";
+
+  useEffect(() => {
+    setActiveSection(pathname === "/profile" ? "Profile" : "Dashboard");
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!session?.user) {
+      return;
+    }
+    try {
+      const key = `hb-profile-name:${session.user.id}`;
+      const savedName = window.localStorage.getItem(key);
+      if (savedName != null) {
+        setProfile({ name: savedName });
+      }
+    } catch {
+      // Ignore storage failures (e.g., private mode restrictions).
+    }
+  }, [session?.user?.id]);
+
+  useEffect(() => {
+    if (!session?.user) return;
+    try {
+      const key = `hb-profile-name:${session.user.id}`;
+      window.localStorage.setItem(key, profile.name);
+      window.localStorage.setItem("hb-profile-name:last", profile.name);
+    } catch {
+      // Ignore storage failures to avoid blocking profile editing.
+    }
+  }, [profile.name, session?.user?.id]);
+
+  const handleSectionNavigation = (section: Section) => {
+    setActiveSection(section);
+    if (section === "Profile") {
+      router.push("/profile");
+      return;
+    }
+    if (pathname === "/profile") {
+      router.push("/");
+    }
+  };
 
   const fetchReadings = async (userId: string) => {
     let data:
@@ -536,7 +604,7 @@ export default function Home() {
   const latestReading = readings[0];
   const latestCategory =
     latestReading?.category ?? fallbackReadingAnalysis.category;
-  const displayName = profile.name || session?.user.email || "User";
+  const displayName = profileDisplayLabel;
 
   const chartData = useMemo(
     () =>
@@ -936,49 +1004,43 @@ export default function Home() {
   const renderProfile = () => {
     const u = session?.user;
     const email = u?.email ?? "—";
-    const initials = getUserInitials(profile.name, email === "—" ? "" : email);
+    const initials = "RI"; // Fixed initials as requested
     const profileHeadlineName = profile.name.trim() || email;
     const accountCreated = formatDateTimeLocal(u?.created_at);
     const lastSignIn = formatDateTimeLocal(u?.last_sign_in_at);
 
     return (
-      <div className='max-w-4xl mx-auto space-y-8 py-4'>
-        {/* Your Profile Card */}
-        <section className='overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50 transition-all dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none'>
-          <div className='relative h-32 bg-gradient-to-r from-blue-600 to-indigo-600 dark:from-blue-900 dark:to-indigo-950'>
-            <div className='absolute -bottom-12 left-8'>
-              <div className='flex h-24 w-24 items-center justify-center rounded-full bg-white p-1.5 shadow-lg dark:bg-zinc-800'>
-                <div className='flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-blue-500 to-cyan-500 text-2xl font-bold text-white shadow-inner'>
-                  {initials}
-                </div>
+      <div className='mx-auto max-w-4xl space-y-8 pb-12 pt-16'>
+        {/* Modern SaaS Header */}
+        <div className='flex flex-col gap-6 md:flex-row md:items-center md:justify-between'>
+          <div className='flex items-center gap-5'>
+            <div className='flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-blue-600 to-indigo-700 p-1 shadow-lg ring-4 ring-white dark:ring-zinc-900'>
+              <div className='flex h-full w-full items-center justify-center rounded-full bg-white/10 text-2xl font-bold text-white backdrop-blur-md'>
+                {initials}
               </div>
+            </div>
+            <div>
+              <div className='flex items-center gap-3'>
+                <h1 className='text-3xl font-black tracking-tight text-slate-900 dark:text-zinc-50'>
+                  {profileHeadlineName}
+                </h1>
+                <span className='inline-flex items-center gap-1 rounded-full bg-blue-50 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-blue-700 ring-1 ring-blue-200 dark:bg-blue-900/30 dark:text-blue-300 dark:ring-blue-800'>
+                  Active Patient
+                </span>
+              </div>
+              <p className='mt-1 text-sm font-medium text-slate-500 dark:text-zinc-400'>
+                {email}
+              </p>
             </div>
           </div>
-          <div className='pb-8 pl-8 pr-8 pt-16'>
-            <div className='flex flex-col gap-6 md:flex-row md:items-end md:justify-between'>
-              <div>
-                <div className='flex flex-wrap items-center gap-2'>
-                  <h2 className='text-2xl font-bold text-slate-900 dark:text-zinc-50'>
-                    {profileHeadlineName}
-                  </h2>
-                  <span className='inline-flex items-center gap-1 rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-300 dark:ring-emerald-800'>
-                    <Shield className='h-3 w-3' />
-                    Active Patient
-                  </span>
-                </div>
-                <p className='mt-1 text-slate-500 dark:text-zinc-400'>
-                  Manage your personal details and account settings
-                </p>
-              </div>
-              <div className='flex items-center gap-2 rounded-xl bg-slate-50 px-4 py-2 text-sm font-medium text-slate-600 dark:bg-zinc-800 dark:text-zinc-300'>
-                <Shield className='h-4 w-4 text-blue-500' />
-                Secure Patient Account
-              </div>
-            </div>
+        </div>
 
-            <div className='mt-10 max-w-xl'>
-              <label className='flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-zinc-400'>
-                <User className='h-4 w-4' />
+        {/* Profile Settings Card */}
+        <section className='overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-xl shadow-slate-200/50 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none'>
+          <div className='p-8'>
+            <div className='max-w-xl'>
+              <label className='flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-500 dark:text-zinc-400'>
+                <User className='h-3.5 w-3.5' />
                 Display Name (for reports)
               </label>
               <div className='group relative mt-3'>
@@ -990,105 +1052,88 @@ export default function Home() {
                       name: event.target.value,
                     }))
                   }
-                  className='w-full rounded-2xl border-2 border-slate-100 bg-slate-50/50 px-5 py-4 text-slate-900 transition-all duration-200 placeholder:text-slate-400 hover:border-slate-200 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:hover:border-zinc-700 dark:focus:border-blue-400 dark:focus:bg-zinc-800 dark:focus:ring-blue-400/10'
+                  className='w-full rounded-2xl border border-slate-200 bg-slate-50/50 px-5 py-4 text-slate-900 transition-all duration-200 placeholder:text-slate-400 hover:border-slate-300 focus:border-blue-500 focus:bg-white focus:ring-4 focus:ring-blue-500/10 dark:border-zinc-800 dark:bg-zinc-800/50 dark:text-zinc-50 dark:placeholder:text-zinc-500 dark:hover:border-zinc-700 dark:focus:border-blue-400 dark:focus:bg-zinc-800 dark:focus:ring-blue-400/10'
                   placeholder='Enter your full name'
                 />
-                <div className='absolute right-4 top-1/2 -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100'>
-                  <div className='rounded-lg bg-blue-500 px-2 py-1 text-[10px] font-bold text-white uppercase'>
-                    Editing
-                  </div>
-                </div>
               </div>
-              <p className='mt-3 text-xs text-slate-400 dark:text-zinc-500'>
-                This name will appear on all your generated PDF reports.
+              <p className='mt-3 text-[11px] font-medium text-slate-400 dark:text-zinc-500'>
+                This name will be used across all your clinical and history
+                reports.
               </p>
 
               <button
                 type='button'
                 onClick={() => setSaveSuccessToast(true)}
-                className='mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-4 text-sm font-bold text-white shadow-lg shadow-blue-500/25 transition-all hover:from-blue-700 hover:to-indigo-700 hover:shadow-xl active:scale-95 md:w-auto'
+                className='mt-8 flex w-full items-center justify-center gap-2 rounded-2xl bg-blue-600 px-8 py-4 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-700 active:scale-95 md:w-auto'
               >
-                <Shield className='h-4 w-4' />
-                Update Profile Information
+                Save Changes
               </button>
             </div>
           </div>
         </section>
 
-        {/* Personal Information Card */}
-        <section className='rounded-3xl border border-slate-200 bg-white p-8 shadow-xl shadow-slate-200/50 dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-none'>
-          <div className='mb-8 flex items-center justify-between border-b border-slate-100 pb-6 dark:border-zinc-800'>
-            <div>
-              <h3 className='text-xl font-bold text-slate-900 dark:text-zinc-50'>
-                Personal Information
-              </h3>
-              <p className='mt-1 text-sm text-slate-500 dark:text-zinc-400'>
-                Verified account details from your session
-              </p>
+        {/* Interactive Info Cards */}
+        <div className='grid gap-4 md:grid-cols-3'>
+          <div className='group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-blue-200 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-blue-900'>
+            <div className='flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'>
+              <Mail className='h-6 w-6' />
             </div>
-            <div className='rounded-full bg-blue-50 p-3 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400'>
+            <p className='mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
+              Account Email
+            </p>
+            <p className='mt-1 truncate text-sm font-bold text-slate-900 dark:text-zinc-50'>
+              {email}
+            </p>
+          </div>
+
+          <div className='group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-emerald-200 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-emerald-900'>
+            <div className='flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-900/30 dark:text-emerald-400'>
+              <CalendarDays className='h-6 w-6' />
+            </div>
+            <p className='mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
+              Joined Date
+            </p>
+            <p className='mt-1 text-sm font-bold text-slate-900 dark:text-zinc-50'>
+              {accountCreated}
+            </p>
+          </div>
+
+          <div className='group rounded-3xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:border-indigo-200 hover:shadow-md dark:border-zinc-800 dark:bg-zinc-900 dark:hover:border-indigo-900'>
+            <div className='flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-50 text-indigo-600 dark:bg-indigo-900/30 dark:text-indigo-400'>
               <Fingerprint className='h-6 w-6' />
             </div>
+            <p className='mt-4 text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
+              Patient ID
+            </p>
+            <div className='mt-1 flex items-center gap-2'>
+              <p className='truncate font-mono text-[10px] font-bold text-slate-600 dark:text-zinc-400'>
+                {u?.id ? `${u.id.slice(0, 5)}...${u.id.slice(-5)}` : "—"}
+              </p>
+              {u?.id && (
+                <button
+                  onClick={() => {
+                    void navigator.clipboard.writeText(u.id);
+                    setIdCopied(true);
+                    setTimeout(() => setIdCopied(false), 2000);
+                  }}
+                  className='flex h-6 w-6 items-center justify-center rounded-lg bg-slate-50 text-slate-400 transition-colors hover:bg-slate-100 hover:text-blue-600 dark:bg-zinc-800 dark:text-zinc-500 dark:hover:bg-zinc-700 dark:hover:text-blue-400'
+                  title='Copy full ID'
+                >
+                  {idCopied ? (
+                    <Check className='h-3 w-3 text-emerald-500' />
+                  ) : (
+                    <Copy className='h-3 w-3' />
+                  )}
+                </button>
+              )}
+            </div>
+            {idCopied && (
+              <span className='absolute mt-1 text-[9px] font-bold text-emerald-600 dark:text-emerald-400 animate-in fade-in slide-in-from-bottom-1'>
+                Copied!
+              </span>
+            )}
           </div>
-
-          <div className='grid gap-8 md:grid-cols-2'>
-            <div className='flex gap-4 rounded-2xl bg-slate-50 p-5 transition-colors hover:bg-slate-100 dark:bg-zinc-800/50 dark:hover:bg-zinc-800'>
-              <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-blue-600 shadow-sm dark:bg-zinc-800 dark:text-blue-400'>
-                <Mail className='h-6 w-6' />
-              </div>
-              <div className='min-w-0 flex-1'>
-                <p className='text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
-                  Email Address
-                </p>
-                <p className='mt-1 truncate text-sm font-semibold text-slate-900 dark:text-zinc-50'>
-                  {email}
-                </p>
-              </div>
-            </div>
-
-            <div className='flex gap-4 rounded-2xl bg-slate-50 p-5 transition-colors hover:bg-slate-100 dark:bg-zinc-800/50 dark:hover:bg-zinc-800'>
-              <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-emerald-600 shadow-sm dark:bg-zinc-800 dark:text-emerald-400'>
-                <Calendar className='h-6 w-6' />
-              </div>
-              <div className='min-w-0 flex-1'>
-                <p className='text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
-                  Account Created
-                </p>
-                <p className='mt-1 text-sm font-semibold text-slate-900 dark:text-zinc-50'>
-                  {accountCreated}
-                </p>
-              </div>
-            </div>
-
-            <div className='flex gap-4 rounded-2xl bg-slate-50 p-5 transition-colors hover:bg-slate-100 dark:bg-zinc-800/50 dark:hover:bg-zinc-800'>
-              <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-indigo-600 shadow-sm dark:bg-zinc-800 dark:text-indigo-400'>
-                <Clock className='h-6 w-6' />
-              </div>
-              <div className='min-w-0 flex-1'>
-                <p className='text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
-                  Last Sign In
-                </p>
-                <p className='mt-1 text-sm font-semibold text-slate-900 dark:text-zinc-50'>
-                  {lastSignIn}
-                </p>
-              </div>
-            </div>
-
-            <div className='flex gap-4 rounded-2xl bg-slate-50 p-5 transition-colors hover:bg-slate-100 dark:bg-zinc-800/50 dark:hover:bg-zinc-800'>
-              <div className='flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-white text-slate-600 shadow-sm dark:bg-zinc-800 dark:text-slate-400'>
-                <Shield className='h-6 w-6' />
-              </div>
-              <div className='min-w-0 flex-1'>
-                <p className='text-xs font-bold uppercase tracking-widest text-slate-400 dark:text-zinc-500'>
-                  Unique User ID
-                </p>
-                <p className='mt-1 truncate font-mono text-[10px] font-bold text-slate-600 dark:text-zinc-400'>
-                  {u?.id ?? "—"}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
       </div>
     );
   };
@@ -1111,7 +1156,7 @@ export default function Home() {
           onClick={downloadHistoryPdfReport}
           className={`${primaryBtnClass} w-full sm:w-auto shadow-lg shadow-blue-500/10`}
         >
-          Download Data Report
+          Download Full Report
         </button>
       </div>
       <div className='mt-6 overflow-hidden rounded-2xl border border-slate-100 dark:border-zinc-800'>
@@ -1362,8 +1407,8 @@ export default function Home() {
 
   const renderDashboard = () => {
     return (
-      <div className='space-y-10'>
-        <section className='grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5'>
+      <div className='space-y-10 pt-3 md:pt-6'>
+        <section className='mt-2 grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-5'>
           {(
             [
               "Normal",
@@ -1395,7 +1440,7 @@ export default function Home() {
           ))}
         </section>
 
-        <div className='flex items-center justify-between gap-4'>
+        <div className='mt-4 flex items-center justify-between gap-4'>
           <div>
             <h2 className='text-2xl font-bold text-slate-900 dark:text-zinc-50'>
               Health Dashboard
@@ -1429,54 +1474,52 @@ export default function Home() {
                 Monitoring your systolic and diastolic progress
               </p>
             </div>
-            <button
-              type='button'
-              onClick={downloadHistoryPdfReport}
-              className={`${primaryBtnClass} w-full sm:w-auto shadow-lg shadow-blue-500/10`}
-            >
-              Download Full Report
-            </button>
           </div>
-          <div className='h-72 w-full min-w-0'>
-            <ResponsiveContainer width='100%' height='100%'>
-              <LineChart data={chartData}>
-                <CartesianGrid
-                  strokeDasharray='3 3'
-                  stroke='var(--chart-grid)'
-                />
-                <XAxis
-                  dataKey='time'
-                  tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
-                />
-                <YAxis
-                  domain={[40, 200]}
-                  tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: "var(--chart-tooltip-bg)",
-                    border: "1px solid var(--chart-tooltip-border)",
-                    borderRadius: 12,
-                    color: "var(--chart-tooltip-text)",
-                  }}
-                />
-                <Legend wrapperStyle={{ color: "var(--chart-axis)" }} />
-                <Line
-                  type='monotone'
-                  dataKey='systolic'
-                  stroke='#2563eb'
-                  strokeWidth={3}
-                  dot
-                />
-                <Line
-                  type='monotone'
-                  dataKey='diastolic'
-                  stroke='#f97316'
-                  strokeWidth={3}
-                  dot
-                />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className='mt-4 rounded-2xl border border-slate-100 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900/80 sm:p-6'>
+            <div className='h-72 w-full min-w-0'>
+              <ResponsiveContainer width='100%' height='100%'>
+                <LineChart
+                  data={chartData}
+                  margin={{ top: 8, right: 10, left: 0, bottom: 6 }}
+                >
+                  <CartesianGrid
+                    strokeDasharray='3 3'
+                    stroke='var(--chart-grid)'
+                  />
+                  <XAxis
+                    dataKey='time'
+                    tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
+                  />
+                  <YAxis
+                    domain={[40, 200]}
+                    tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "var(--chart-tooltip-bg)",
+                      border: "1px solid var(--chart-tooltip-border)",
+                      borderRadius: 12,
+                      color: "var(--chart-tooltip-text)",
+                    }}
+                  />
+                  <Legend wrapperStyle={{ color: "var(--chart-axis)" }} />
+                  <Line
+                    type='linear'
+                    dataKey='systolic'
+                    stroke='#2563eb'
+                    strokeWidth={3}
+                    dot
+                  />
+                  <Line
+                    type='linear'
+                    dataKey='diastolic'
+                    stroke='#f97316'
+                    strokeWidth={3}
+                    dot
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </section>
       </div>
@@ -1621,17 +1664,6 @@ export default function Home() {
 
   return (
     <div className='min-h-screen bg-slate-50 text-slate-800 dark:bg-zinc-950 dark:text-zinc-100'>
-      <div className='fixed right-4 top-[max(12px,env(safe-area-inset-top,0px))] z-[100] flex items-center gap-2 sm:right-5 sm:top-5'>
-        <button
-          onClick={() => setActiveSection("Profile")}
-          className='hidden max-w-[220px] items-center gap-2 rounded-xl bg-white/90 px-3 py-2 text-xs font-medium text-slate-600 ring-1 ring-slate-200 shadow-sm backdrop-blur-sm transition-all hover:bg-white hover:ring-blue-300 dark:bg-zinc-800/90 dark:text-zinc-300 dark:ring-zinc-700 dark:hover:ring-blue-800 md:flex'
-        >
-          <User className='h-3.5 w-3.5 text-blue-500' />
-          <span className='truncate'>{displayName}</span>
-        </button>
-        {themeToggle}
-      </div>
-
       {saveSuccessToast ? (
         <div
           className='fixed left-1/2 top-6 z-[100] flex -translate-x-1/2 items-center gap-3 rounded-2xl border border-emerald-200 bg-white/95 px-5 py-4 text-sm font-bold text-emerald-900 shadow-[0_10px_40px_rgba(16,185,129,0.15)] ring-1 ring-emerald-500/10 backdrop-blur-md dark:border-emerald-800 dark:bg-zinc-900/95 dark:text-emerald-300'
@@ -1663,7 +1695,7 @@ export default function Home() {
         </div>
       ) : null}
 
-      <header className='sticky top-0 z-[90] flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/95 px-4 py-3 pr-16 shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/95 lg:hidden'>
+      <header className='sticky top-0 z-[90] flex items-center justify-between gap-3 border-b border-slate-200/80 bg-white/95 px-4 py-3 shadow-sm backdrop-blur-md dark:border-zinc-800 dark:bg-zinc-900/95 lg:hidden'>
         <button
           type='button'
           onClick={() => setMobileNavOpen(true)}
@@ -1691,7 +1723,17 @@ export default function Home() {
             Hypertension Buddy
           </span>
         </div>
-        <span className='w-11 shrink-0' aria-hidden />
+        <div className='flex shrink-0 items-center gap-2'>
+          {themeToggle}
+          <button
+            type='button'
+            onClick={() => handleSectionNavigation("Profile")}
+            className='flex h-11 w-11 items-center justify-center rounded-[12px] border border-slate-200 bg-white text-slate-700 transition hover:bg-slate-50 dark:border-zinc-600 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700'
+            aria-label='Open profile'
+          >
+            <User className='h-5 w-5' strokeWidth={2.2} />
+          </button>
+        </div>
       </header>
 
       {mobileNavOpen ? (
@@ -1704,24 +1746,24 @@ export default function Home() {
       ) : null}
 
       <aside
-        className={`fixed inset-y-0 left-0 z-50 w-[min(280px,88vw)] transform border-r border-slate-100 bg-white shadow-[4px_0_24px_rgba(15,23,42,0.08)] transition-transform duration-200 ease-out dark:border-zinc-800 dark:bg-zinc-900 dark:shadow-black/40 lg:hidden ${
+        className={`fixed inset-y-0 left-0 z-50 w-[min(300px,88vw)] transform border-r border-blue-900/40 bg-slate-900/95 text-slate-100 shadow-[6px_0_30px_rgba(15,23,42,0.45)] backdrop-blur-xl transition-transform duration-200 ease-out lg:hidden ${
           mobileNavOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className='flex h-full flex-col overflow-y-auto p-5'>
           <div className='mb-5 flex items-center justify-between gap-2'>
             <div className='min-w-0'>
-              <p className='text-xs font-semibold uppercase tracking-wide text-[#2563eb]'>
+              <p className='text-xs font-semibold uppercase tracking-wide text-blue-300'>
                 Hypertension Buddy
               </p>
-              <h2 className='mt-0.5 truncate text-lg font-semibold text-slate-900 dark:text-zinc-50'>
+              <h2 className='mt-0.5 truncate text-lg font-semibold tracking-wide text-slate-100'>
                 Menu
               </h2>
             </div>
             <button
               type='button'
               onClick={() => setMobileNavOpen(false)}
-              className='flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-200 text-slate-600 hover:bg-slate-50 dark:border-zinc-600 dark:text-zinc-300 dark:hover:bg-zinc-800'
+              className='flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] border border-slate-700 text-slate-200 hover:bg-slate-800'
               aria-label='Close menu'
             >
               <svg
@@ -1740,96 +1782,119 @@ export default function Home() {
               </svg>
             </button>
           </div>
-          <nav className='space-y-2'>
-            {sections.map((item) => (
+          <nav className='space-y-3'>
+            {sidebarNavItems.map((item) => (
               <button
                 type='button'
-                key={item}
+                key={item.label}
                 onClick={() => {
-                  setActiveSection(item);
+                  handleSectionNavigation(item.label);
                   setMobileNavOpen(false);
                 }}
-                className={`w-full rounded-[12px] px-4 py-3 text-left text-sm font-medium transition-all duration-200 active:scale-95 ${
-                  activeSection === item
-                    ? "bg-[#2563eb] text-white shadow-md"
-                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                className={`flex w-full items-center gap-3 rounded-full px-5 py-3.5 text-left text-[15px] font-semibold transition-all duration-200 active:scale-95 ${
+                  activeSection === item.label
+                    ? "bg-blue-500/90 text-white shadow-lg shadow-blue-900/30"
+                    : "bg-slate-800/80 text-slate-100 hover:bg-slate-700"
                 }`}
               >
-                {item}
+                <item.icon className='h-5 w-5 shrink-0' strokeWidth={2.3} />
+                <span>{item.label}</span>
               </button>
             ))}
           </nav>
-          <div className='mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/50'>
-            <p className='text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400'>
+          <div className='mt-6 rounded-2xl border border-slate-700 bg-slate-800/80 p-4'>
+            <p className='text-xs font-semibold uppercase tracking-wide text-slate-400'>
               Signed in
             </p>
-            <p className='mt-1 truncate text-sm font-medium text-slate-800 dark:text-zinc-100'>
+            <p className='mt-1 truncate text-sm font-medium text-slate-100'>
               {session.user.email}
             </p>
-            <p className='mt-1 text-xs text-slate-500 dark:text-zinc-400'>
+            <p className='mt-1 text-xs text-slate-400'>
               {profile.name ? profile.name : "Name not set"}
             </p>
           </div>
-          <button
-            type='button'
-            onClick={() => {
-              setMobileNavOpen(false);
-              void handleLogout();
-            }}
-            className='mt-auto w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 shadow-sm transition-all duration-200 hover:bg-red-100 hover:shadow-md hover:-translate-y-0.5 active:scale-95 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60'
-          >
-            Logout
-          </button>
+          <div className='mt-auto pt-8'>
+            <button
+              type='button'
+              onClick={() => {
+                setMobileNavOpen(false);
+                void handleLogout();
+              }}
+              className='flex w-full items-center gap-3 rounded-full border border-red-400/30 bg-red-500/20 px-5 py-3.5 text-left text-[15px] font-semibold text-red-200 shadow-sm transition-all duration-200 hover:bg-red-500/30 hover:shadow-md hover:-translate-y-0.5 active:scale-95'
+            >
+              <LogOut className='h-5 w-5 shrink-0' strokeWidth={2.4} />
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
 
       <div className='mx-auto grid w-full max-w-7xl gap-8 p-4 sm:p-8 lg:grid-cols-[280px_1fr] lg:p-10'>
-        <aside
-          className={`${shellCardClass} hidden h-fit p-6 lg:block sticky top-[80px] shadow-xl shadow-slate-200/50 dark:shadow-none`}
-        >
-          <div className='mb-8 flex items-center gap-3 rounded-2xl bg-gradient-to-br from-[#2563eb] to-blue-700 p-6 text-white shadow-lg shadow-blue-500/20'>
+        <aside className='sticky top-[28px] hidden h-[calc(100vh-56px)] rounded-3xl border border-blue-900/40 bg-gradient-to-b from-slate-900 via-slate-900 to-blue-950 p-7 text-slate-100 shadow-2xl shadow-slate-900/40 lg:block'>
+          <div className='mb-8 flex items-center gap-3 rounded-2xl bg-blue-500/15 p-5 ring-1 ring-blue-400/30'>
             <Heart className='h-6 w-6 text-white fill-white' />
-            <h2 className='text-xl font-black tracking-tight'>
+            <h2 className='text-lg font-bold tracking-wide'>
               HYPERTENSION BUDDY
             </h2>
           </div>
-          <nav className='space-y-2'>
-            {sections.map((item) => (
+          <nav className='space-y-3'>
+            {sidebarNavItems.map((item) => (
               <button
                 type='button'
-                key={item}
-                onClick={() => setActiveSection(item)}
-                className={`w-full rounded-[12px] px-4 py-3 text-left text-sm font-medium transition-all duration-200 hover:shadow-md hover:-translate-y-0.5 active:scale-95 ${
-                  activeSection === item
-                    ? "bg-[#2563eb] text-white shadow-lg"
-                    : "bg-slate-50 text-slate-700 hover:bg-slate-100 dark:bg-zinc-800 dark:text-zinc-200 dark:hover:bg-zinc-700"
+                key={item.label}
+                onClick={() => handleSectionNavigation(item.label)}
+                className={`flex w-full items-center gap-3 rounded-full px-5 py-3.5 text-left text-[15px] font-semibold transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+                  activeSection === item.label
+                    ? "bg-blue-500/95 text-white shadow-lg shadow-blue-900/35"
+                    : "bg-slate-800/80 text-slate-100 hover:bg-slate-700"
                 }`}
               >
-                {item}
+                <item.icon className='h-5 w-5 shrink-0' strokeWidth={2.3} />
+                <span>{item.label}</span>
               </button>
             ))}
           </nav>
-          <div className='mt-6 rounded-[12px] border border-slate-100 bg-slate-50/80 p-4 dark:border-zinc-700 dark:bg-zinc-800/50'>
-            <p className='text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-zinc-400'>
+          <div className='mt-6 rounded-2xl border border-slate-700 bg-slate-800/80 p-4'>
+            <p className='text-xs font-semibold uppercase tracking-wide text-slate-400'>
               Signed in
             </p>
-            <p className='mt-2 truncate text-sm font-medium text-slate-800 dark:text-zinc-100'>
+            <p className='mt-2 truncate text-sm font-medium text-slate-100'>
               {session.user.email}
             </p>
-            <p className='mt-1 text-xs text-slate-500 dark:text-zinc-400'>
+            <p className='mt-1 text-xs text-slate-400'>
               Name: {profile.name || "Not set"}
             </p>
           </div>
-          <button
-            type='button'
-            onClick={() => void handleLogout()}
-            className='mt-6 w-full rounded-[12px] border border-red-100 bg-red-50 px-4 py-3 text-left text-sm font-semibold text-red-700 shadow-sm transition-all duration-200 hover:bg-red-100 hover:shadow-md hover:-translate-y-0.5 active:scale-95 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60'
-          >
-            Logout
-          </button>
+          <div className='mt-auto pt-8'>
+            <button
+              type='button'
+              onClick={() => void handleLogout()}
+              className='flex w-full items-center gap-3 rounded-full border border-red-400/30 bg-red-500/20 px-5 py-3.5 text-left text-[15px] font-semibold text-red-200 shadow-sm transition-all duration-200 hover:bg-red-500/30 hover:shadow-md hover:-translate-y-0.5 active:scale-95'
+            >
+              <LogOut className='h-5 w-5 shrink-0' strokeWidth={2.4} />
+              Logout
+            </button>
+          </div>
         </aside>
 
         <main className='min-w-0 space-y-5 pb-8 lg:pb-0'>
+          <div className='hidden items-center justify-end md:flex'>
+            <div className='flex items-center gap-3'>
+              {themeToggle}
+              <button
+                type='button'
+                onClick={() => handleSectionNavigation("Profile")}
+                className='flex min-w-[120px] max-w-fit items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 shadow-sm transition-all hover:border-blue-300 hover:shadow-md dark:border-zinc-700 dark:bg-zinc-900 dark:hover:border-blue-700'
+              >
+                <div className='flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-blue-100 text-blue-600 dark:bg-blue-950/80 dark:text-blue-300'>
+                  <User className='h-4 w-4' />
+                </div>
+                <span className='truncate text-xs font-bold text-slate-800 dark:text-zinc-100'>
+                  {profileDisplayLabel}
+                </span>
+              </button>
+            </div>
+          </div>
           {activeSection === "Dashboard" && renderDashboard()}
           {activeSection === "Profile" && renderProfile()}
           {activeSection === "History" && renderHistoryTable()}
