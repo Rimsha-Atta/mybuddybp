@@ -86,6 +86,9 @@ type Section =
   | "Health Tips"
   | "Medical Standards";
 
+const BP_MIN_VALUE = 40;
+const BP_MAX_VALUE = 300;
+
 const sidebarNavItems: {
   label: Exclude<Section, "Profile">;
   icon: typeof LayoutDashboard;
@@ -95,6 +98,9 @@ const sidebarNavItems: {
   { label: "Health Tips", icon: Lightbulb },
   { label: "Medical Standards", icon: BookOpenText },
 ];
+
+let sessionCache: Session | null | undefined;
+const readingsCache = new Map<string, Reading[]>();
 
 function categorizeReading(systolic: number, diastolic: number): BpCategory {
   if (systolic >= 180 || diastolic >= 120) return "Crisis";
@@ -439,11 +445,16 @@ export default function Home() {
   const [systolic, setSystolic] = useState("");
   const [diastolic, setDiastolic] = useState("");
   const [readingAge, setReadingAge] = useState("");
-  const [readings, setReadings] = useState<Reading[]>([]);
+  const [readings, setReadings] = useState<Reading[]>(() => {
+    if (sessionCache?.user?.id) {
+      return readingsCache.get(sessionCache.user.id) ?? [];
+    }
+    return [];
+  });
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-  const [session, setSession] = useState<Session | null>(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  const [session, setSession] = useState<Session | null>(sessionCache ?? null);
+  const [authLoading, setAuthLoading] = useState(sessionCache === undefined);
   const [authMode, setAuthMode] = useState<"login" | "signup">("login");
   const [authMessage, setAuthMessage] = useState("");
   const [showLoginPassword, setShowLoginPassword] = useState(false);
@@ -500,15 +511,25 @@ export default function Home() {
   const handleSectionNavigation = (section: Section) => {
     setActiveSection(section);
     if (section === "Profile") {
-      router.push("/profile");
-      return;
-    }
-    if (pathname === "/profile") {
-      router.push("/");
+      if (pathname !== "/profile") {
+        router.push("/profile");
+      }
     }
   };
 
-  const fetchReadings = async (userId: string) => {
+  const fetchReadings = async (
+    userId: string,
+    options?: { preferCache?: boolean },
+  ) => {
+    if (options?.preferCache) {
+      const cachedReadings = readingsCache.get(userId);
+      if (cachedReadings) {
+        setFetchError("");
+        setReadings(cachedReadings);
+        return;
+      }
+    }
+
     let data:
       | {
           id: string;
@@ -546,32 +567,31 @@ export default function Home() {
     }
 
     setFetchError("");
-    setReadings(
-      (data ?? []).map((row) => {
-        const analysis = analyzeReading(row.systolic, row.diastolic, row.age);
-        return {
-          ...analysis,
-          id: row.id,
-          systolic: row.systolic,
-          diastolic: row.diastolic,
-          age: row.age,
-          metadata: isBpMetadata(row.metadata)
-            ? row.metadata
-            : analysis.metadata,
-          createdAt: row.created_at,
-        };
-      }),
-    );
+    const normalizedReadings = (data ?? []).map((row) => {
+      const analysis = analyzeReading(row.systolic, row.diastolic, row.age);
+      return {
+        ...analysis,
+        id: row.id,
+        systolic: row.systolic,
+        diastolic: row.diastolic,
+        age: row.age,
+        metadata: isBpMetadata(row.metadata) ? row.metadata : analysis.metadata,
+        createdAt: row.created_at,
+      };
+    });
+    readingsCache.set(userId, normalizedReadings);
+    setReadings(normalizedReadings);
   };
 
   useEffect(() => {
     const bootAuth = async () => {
       const { data } = await supabase.auth.getSession();
+      sessionCache = data.session;
       setSession(data.session);
       setAuthLoading(false);
       if (data.session?.user) {
         setLoginEmail(data.session.user.email ?? "");
-        await fetchReadings(data.session.user.id);
+        await fetchReadings(data.session.user.id, { preferCache: true });
       }
     };
 
@@ -580,12 +600,13 @@ export default function Home() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      sessionCache = nextSession;
       setSession(nextSession);
       setLoginEmail(nextSession?.user.email ?? "");
       if (!nextSession?.user) {
         setReadings([]);
       } else {
-        void fetchReadings(nextSession.user.id);
+        void fetchReadings(nextSession.user.id, { preferCache: true });
       }
     });
 
@@ -608,14 +629,25 @@ export default function Home() {
 
   const chartData = useMemo(
     () =>
-      [...readings].reverse().map((reading) => ({
-        time: new Date(reading.createdAt).toLocaleDateString([], {
-          month: "short",
-          day: "numeric",
-        }),
-        systolic: reading.systolic,
-        diastolic: reading.diastolic,
-      })),
+      [...readings]
+        .reverse()
+        .filter(
+          (r) =>
+            Number.isFinite(r.systolic) &&
+            Number.isFinite(r.diastolic) &&
+            r.systolic >= BP_MIN_VALUE &&
+            r.systolic <= BP_MAX_VALUE &&
+            r.diastolic >= BP_MIN_VALUE &&
+            r.diastolic <= BP_MAX_VALUE,
+        )
+        .map((reading) => ({
+          time: new Date(reading.createdAt).toLocaleDateString([], {
+            month: "short",
+            day: "numeric",
+          }),
+          systolic: reading.systolic,
+          diastolic: reading.diastolic,
+        })),
     [readings],
   );
 
@@ -864,9 +896,16 @@ export default function Home() {
       setBpFormWarning("Please enter valid numbers for all fields.");
       return;
     }
-    if (sys < 70 || dia < 40 || age < 1) {
+    if (
+      sys < BP_MIN_VALUE ||
+      sys > BP_MAX_VALUE ||
+      dia < BP_MIN_VALUE ||
+      dia > BP_MAX_VALUE ||
+      age < 1 ||
+      age > 120
+    ) {
       setBpFormWarning(
-        "Check your values: age ≥ 1, systolic ≥ 70, diastolic ≥ 40.",
+        "Invalid values. BP must be between 40-300 mmHg, Age 1-120.",
       );
       return;
     }
@@ -930,7 +969,11 @@ export default function Home() {
       createdAt: data.created_at,
     };
 
-    setReadings((prev) => [entry, ...prev]);
+    setReadings((prev) => {
+      const next = [entry, ...prev];
+      readingsCache.set(session.user.id, next);
+      return next;
+    });
     setLatestSubmitted(entry);
     setShowAddReadingModal(false);
     setShowResultModal(true);
@@ -942,16 +985,28 @@ export default function Home() {
 
   const deleteReading = async (id: string) => {
     if (!session?.user) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("readings")
       .delete()
       .eq("id", id)
-      .eq("user_id", session.user.id);
+      .eq("user_id", session.user.id)
+      .select("id");
+
     if (error) {
-      setSaveError(error.message);
+      setSaveError(`Deletion failed: ${error.message}`);
       return;
     }
-    setReadings((prev) => prev.filter((r) => r.id !== id));
+
+    if (!data || data.length === 0) {
+      setSaveError("Unable to delete this reading from database.");
+      return;
+    }
+
+    setReadings((prev) => {
+      const next = prev.filter((r) => r.id !== id);
+      readingsCache.set(session.user.id, next);
+      return next;
+    });
   };
 
   const handleLogin = async (event: FormEvent) => {
@@ -996,6 +1051,10 @@ export default function Home() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    if (session?.user?.id) {
+      readingsCache.delete(session.user.id);
+    }
+    sessionCache = null;
     setLoginPassword("");
     setAuthMessage("");
     setActiveSection("Dashboard");
@@ -1491,7 +1550,7 @@ export default function Home() {
                     tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
                   />
                   <YAxis
-                    domain={[40, 200]}
+                    domain={[BP_MIN_VALUE, BP_MAX_VALUE]}
                     tick={{ fontSize: 12, fill: "var(--chart-axis)" }}
                   />
                   <Tooltip
@@ -1982,7 +2041,8 @@ export default function Home() {
                         setBpFormWarning("");
                       }}
                       type='number'
-                      min={70}
+                      min={BP_MIN_VALUE}
+                      max={BP_MAX_VALUE}
                       placeholder='120'
                       className='w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-neutral-900 caret-neutral-900 outline-none transition placeholder:text-gray-500 focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:placeholder:text-zinc-500'
                     />
@@ -2005,7 +2065,8 @@ export default function Home() {
                         setBpFormWarning("");
                       }}
                       type='number'
-                      min={40}
+                      min={BP_MIN_VALUE}
+                      max={BP_MAX_VALUE}
                       placeholder='80'
                       className='w-full rounded-xl border border-slate-200 bg-white py-3 pl-10 pr-4 text-sm text-neutral-900 caret-neutral-900 outline-none transition placeholder:text-gray-500 focus:border-[#2563eb] focus:ring-2 focus:ring-[#2563eb]/20 dark:border-zinc-600 dark:bg-zinc-800/90 dark:text-zinc-50 dark:placeholder:text-zinc-500'
                     />
